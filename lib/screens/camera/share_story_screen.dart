@@ -36,25 +36,22 @@ class _ShareStoryScreenState extends State<ShareStoryScreen> {
       final isPublic = _selectedVisibility == 'public';
       final caption = _captionController.text.trim();
       
-      // For now, we'll use a placeholder image URL since we don't have Firebase Storage set up
-      // In a real implementation, you would upload the image file to Firebase Storage first
-      final placeholderImageUrl = 'https://picsum.photos/400/600?random=${DateTime.now().millisecondsSinceEpoch}';
+      // Use the actual image file path instead of placeholder
+      // Note: In production, you would upload to Firebase Storage and use that URL
+      final actualImagePath = widget.imagePath;
       
       // Create the story using the service manager
       final storyId = await AppServiceManager().createStory(
         type: StoryType.image,
         visibility: isPublic ? StoryVisibility.public : StoryVisibility.friends,
-        mediaUrl: placeholderImageUrl,
+        mediaUrl: actualImagePath, // Use the actual file path
         caption: caption.isNotEmpty ? caption : null,
       );
       
       print('Story created with ID: $storyId');
       
-      // Delete the temporary file
-      final file = File(widget.imagePath);
-      if (file.existsSync()) {
-        await file.delete();
-      }
+      // Note: We're not deleting the file immediately so it can be displayed in the feed
+      // In production, you would upload to Firebase Storage and then delete the local file
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

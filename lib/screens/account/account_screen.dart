@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../services/user_database_service.dart';
 import '../../models/user_model.dart';
 import '../auth/login_screen.dart';
+import 'my_stories_screen.dart';
 import 'dart:async';
 
 class AccountScreen extends StatefulWidget {
@@ -375,7 +376,8 @@ class _AccountScreenState extends State<AccountScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: InkWell(
-        onTap: title == 'Friends' ? _navigateToFriendsTab : null,
+        onTap: title == 'Friends' ? _navigateToFriendsTab : 
+               title == 'Stories' ? _navigateToMyStories : null,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -675,6 +677,14 @@ class _AccountScreenState extends State<AccountScreen> {
   void _navigateToFriendsTab() {
     // Navigate to friends tab (index 1) using the callback
     widget.onNavigateToTab?.call(1);
+  }
+
+  void _navigateToMyStories() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const MyStoriesScreen(),
+      ),
+    );
   }
 
   void _showEditHandleDialog(BuildContext context, UserModel? userModel) {

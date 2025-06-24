@@ -174,6 +174,16 @@ class AppServiceManager extends ChangeNotifier {
     await StoryDatabaseService.shareStory(storyId);
   }
 
+  Future<void> updateStoryCaption(String storyId, String caption) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    await StoryDatabaseService.updateStoryCaption(storyId, currentUserId!, caption);
+  }
+
+  Future<void> updateStoryVisibility(String storyId, StoryVisibility visibility) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    await StoryDatabaseService.updateStoryVisibility(storyId, currentUserId!, visibility);
+  }
+
   Future<void> deleteStory(String storyId) async {
     if (currentUserId == null) throw Exception('User not authenticated');
     await StoryDatabaseService.deleteStory(storyId, currentUserId!);

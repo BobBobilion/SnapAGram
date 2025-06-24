@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
@@ -223,41 +224,45 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ),
               child: Stack(
                 children: [
-                  // Story media placeholder (will be replaced with actual media)
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          story.type == StoryType.image 
-                              ? Icons.image 
-                              : Icons.videocam,
-                          size: 48,
-                          color: Colors.grey[400],
+                  // Display actual story media
+                  ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                    child: _buildStoryMedia(story),
+                  ),
+                  
+                  // Caption overlay (if image loaded successfully)
+                  if (story.caption != null && story.caption!.isNotEmpty)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.7),
+                              Colors.transparent,
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          story.type == StoryType.image ? 'Image Story' : 'Video Story',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          story.caption!,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        if (story.caption != null && story.caption!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            story.caption!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[500],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
-                  ),
                   // View indicator
                   if (isViewed)
                     Positioned(
@@ -509,6 +514,96 @@ class _ExploreScreenState extends State<ExploreScreen> {
   void _shareStory(StoryModel story) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Share feature coming soon!')),
+    );
+  }
+
+  Widget _buildStoryMedia(StoryModel story) {
+    if (story.type == StoryType.image) {
+      // Check if it's a local file path or URL
+      if (story.mediaUrl.startsWith('http')) {
+        // Network image (for placeholder URLs or Firebase Storage URLs)
+        return Image.network(
+          story.mediaUrl,
+          height: 300,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildMediaPlaceholder(story);
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return _buildLoadingPlaceholder();
+          },
+        );
+      } else {
+        // Local file path
+        return Image.file(
+          File(story.mediaUrl),
+          height: 300,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildMediaPlaceholder(story);
+          },
+        );
+      }
+    } else {
+      // Video placeholder for now
+      return _buildMediaPlaceholder(story);
+    }
+  }
+
+  Widget _buildMediaPlaceholder(StoryModel story) {
+    return Container(
+      height: 300,
+      width: double.infinity,
+      color: Colors.grey[200],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            story.type == StoryType.image ? Icons.image : Icons.videocam,
+            size: 48,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            story.type == StoryType.image ? 'Image Story' : 'Video Story',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (story.caption != null && story.caption!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                story.caption!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[500],
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingPlaceholder() {
+    return Container(
+      height: 300,
+      width: double.infinity,
+      color: Colors.grey[200],
+      child: const Center(
+        child: CircularProgressIndicator(),
+      ),
     );
   }
 } 

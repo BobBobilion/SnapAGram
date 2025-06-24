@@ -215,6 +215,46 @@ class StoryDatabaseService {
     }
   }
 
+  // Update story caption
+  static Future<void> updateStoryCaption(String storyId, String userId, String caption) async {
+    try {
+      final story = await getStoryById(storyId);
+      if (story == null) return;
+      
+      // Only the creator can update their story
+      if (story.uid != userId) {
+        throw Exception('You can only edit your own stories');
+      }
+
+      await _storiesCollection.doc(storyId).update({
+        'caption': caption,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+    } catch (e) {
+      throw Exception('Failed to update story caption: $e');
+    }
+  }
+
+  // Update story visibility
+  static Future<void> updateStoryVisibility(String storyId, String userId, StoryVisibility visibility) async {
+    try {
+      final story = await getStoryById(storyId);
+      if (story == null) return;
+      
+      // Only the creator can update their story
+      if (story.uid != userId) {
+        throw Exception('You can only edit your own stories');
+      }
+
+      await _storiesCollection.doc(storyId).update({
+        'visibility': visibility.name,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+    } catch (e) {
+      throw Exception('Failed to update story visibility: $e');
+    }
+  }
+
   // Delete a story
   static Future<void> deleteStory(String storyId, String userId) async {
     try {
