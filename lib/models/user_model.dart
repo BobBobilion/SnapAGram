@@ -4,7 +4,7 @@ class UserModel {
   final String uid;
   final String email;
   final String displayName;
-  final String username;
+  final String handle;
   final String? profilePictureUrl;
   final String? bio;
   final DateTime createdAt;
@@ -26,7 +26,7 @@ class UserModel {
     required this.uid,
     required this.email,
     required this.displayName,
-    required this.username,
+    required this.handle,
     this.profilePictureUrl,
     this.bio,
     required this.createdAt,
@@ -51,7 +51,7 @@ class UserModel {
       'uid': uid,
       'email': email,
       'displayName': displayName,
-      'username': username,
+      'handle': handle,
       'profilePictureUrl': profilePictureUrl,
       'bio': bio,
       'createdAt': Timestamp.fromDate(createdAt),
@@ -83,7 +83,7 @@ class UserModel {
       uid: map['uid'] ?? '',
       email: map['email'] ?? '',
       displayName: map['displayName'] ?? '',
-      username: map['username'] ?? '',
+      handle: map['handle'] ?? '',
       profilePictureUrl: map['profilePictureUrl'],
       bio: map['bio'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -111,7 +111,7 @@ class UserModel {
   // Copy with changes
   UserModel copyWith({
     String? displayName,
-    String? username,
+    String? handle,
     String? profilePictureUrl,
     String? bio,
     DateTime? lastSeen,
@@ -132,7 +132,7 @@ class UserModel {
       uid: uid,
       email: email,
       displayName: displayName ?? this.displayName,
-      username: username ?? this.username,
+      handle: handle ?? this.handle,
       profilePictureUrl: profilePictureUrl ?? this.profilePictureUrl,
       bio: bio ?? this.bio,
       createdAt: createdAt,
@@ -193,7 +193,7 @@ class UserModel {
 
   @override
   String toString() {
-    return 'UserModel(uid: $uid, email: $email, displayName: $displayName, username: $username)';
+    return 'UserModel(uid: $uid, email: $email, displayName: $displayName, handle: $handle)';
   }
 
   @override

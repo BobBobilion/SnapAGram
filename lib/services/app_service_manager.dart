@@ -55,12 +55,24 @@ class AppServiceManager extends ChangeNotifier {
     return await UserDatabaseService.searchUsers(query);
   }
 
+  Future<List<UserModel>> getAllUsers() async {
+    return await UserDatabaseService.getAllUsers();
+  }
+
+  Future<List<String>> getAllHandles() async {
+    return await UserDatabaseService.getAllHandles();
+  }
+
+  Future<List<Map<String, String>>> getAllUserIdentifiers() async {
+    return await UserDatabaseService.getAllUserIdentifiers();
+  }
+
   Future<UserModel?> getUserById(String uid) async {
     return await UserDatabaseService.getUserById(uid);
   }
 
   Future<UserModel?> getUserByUsername(String username) async {
-    return await UserDatabaseService.getUserByUsername(username);
+    return await UserDatabaseService.getUserByHandle(username);
   }
 
   Future<List<UserModel>> getCurrentUserFriends() async {

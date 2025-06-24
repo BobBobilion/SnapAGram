@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/app_service_manager.dart';
+import '../../models/story_model.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -11,11 +13,43 @@ class ExploreScreen extends StatefulWidget {
 class _ExploreScreenState extends State<ExploreScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
+  List<StoryModel> _stories = [];
+  final AppServiceManager _serviceManager = AppServiceManager();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStories();
+  }
 
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadStories() async {
+    if (_isLoading) return;
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      final stories = await _serviceManager.getPublicStories();
+      setState(() {
+        _stories = stories;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading stories: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -60,28 +94,66 @@ class _ExploreScreenState extends State<ExploreScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          // TODO: Implement refresh functionality
-          await Future.delayed(const Duration(seconds: 1));
-        },
+        onRefresh: _loadStories,
         child: _buildStoriesFeed(),
       ),
     );
   }
 
   Widget _buildStoriesFeed() {
-    // TODO: Replace with actual Firestore query for public stories
+    if (_isLoading && _stories.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_stories.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.photo_library_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No stories yet',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Be the first to share a story!',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.all(16),
-      itemCount: 10, // Placeholder count
+      itemCount: _stories.length,
       itemBuilder: (context, index) {
-        return _buildStoryCard(index);
+        return _buildStoryCard(_stories[index]);
       },
     );
   }
 
-  Widget _buildStoryCard(int index) {
+  Widget _buildStoryCard(StoryModel story) {
+    final timeAgo = _getTimeAgo(story.createdAt);
+    final isLiked = story.hasUserLiked(_serviceManager.currentUserId ?? '');
+    final isViewed = story.hasUserViewed(_serviceManager.currentUserId ?? '');
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
@@ -95,23 +167,30 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ListTile(
             leading: CircleAvatar(
               backgroundColor: Colors.blue[100],
-              child: Text(
-                'U${index + 1}',
-                style: TextStyle(
-                  color: Colors.blue[600],
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              backgroundImage: story.creatorProfilePicture != null
+                  ? NetworkImage(story.creatorProfilePicture!)
+                  : null,
+              child: story.creatorProfilePicture == null
+                  ? Text(
+                      story.creatorUsername.isNotEmpty 
+                          ? story.creatorUsername[0].toUpperCase()
+                          : 'U',
+                      style: TextStyle(
+                        color: Colors.blue[600],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
             ),
             title: Text(
-              'User ${index + 1}',
+              story.creatorUsername,
               style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w600,
                 fontSize: 16,
               ),
             ),
             subtitle: Text(
-              '${index + 1} hour${index == 0 ? '' : 's'} ago',
+              timeAgo,
               style: GoogleFonts.poppins(
                 fontSize: 12,
                 color: Colors.grey[600],
@@ -119,49 +198,81 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
             trailing: IconButton(
               icon: const Icon(Icons.more_vert),
-              onPressed: () {
-                _showStoryOptions(context);
-              },
+              onPressed: () => _showStoryOptions(context, story),
             ),
           ),
           
-          // Story Content Placeholder
-          Container(
-            height: 300,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(16),
+          // Story Content
+          GestureDetector(
+            onTap: () => _viewStory(story),
+            child: Container(
+              height: 300,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
               ),
-            ),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Stack(
                 children: [
-                  Icon(
-                    Icons.photo_library,
-                    size: 48,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Story ${index + 1}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
+                  // Story media placeholder (will be replaced with actual media)
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          story.type == StoryType.image 
+                              ? Icons.image 
+                              : Icons.videocam,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          story.type == StoryType.image ? 'Image Story' : 'Video Story',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (story.caption != null && story.caption!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            story.caption!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Tap to view story',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
+                  // View indicator
+                  if (isViewed)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Viewed',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -174,21 +285,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
               children: [
                 IconButton(
                   icon: Icon(
-                    Icons.favorite_border,
-                    color: Colors.grey[600],
+                    isLiked ? Icons.favorite : Icons.favorite_border,
+                    color: isLiked ? Colors.red : Colors.grey[600],
                   ),
-                  onPressed: () {
-                    // TODO: Implement like functionality
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Like feature coming soon!'),
-                        duration: Duration(milliseconds: 500),
-                      ),
-                    );
-                  },
+                  onPressed: () => _toggleLike(story),
                 ),
                 Text(
-                  '${(index + 1) * 5}',
+                  story.likeCount.toString(),
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -200,18 +303,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     Icons.visibility,
                     color: Colors.grey[600],
                   ),
-                  onPressed: () {
-                    // TODO: Show view count
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('${(index + 1) * 10} views'),
-                        duration: const Duration(milliseconds: 500),
-                      ),
-                    );
-                  },
+                  onPressed: () => _viewStory(story),
                 ),
                 Text(
-                  '${(index + 1) * 10}',
+                  story.viewCount.toString(),
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -223,15 +318,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     Icons.share,
                     color: Colors.grey[600],
                   ),
-                  onPressed: () {
-                    // TODO: Implement share functionality
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Share feature coming soon!'),
-                        duration: Duration(milliseconds: 500),
-                      ),
-                    );
-                  },
+                  onPressed: () => _shareStory(story),
                 ),
               ],
             ),
@@ -241,51 +328,97 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  void _showStoryOptions(BuildContext context) {
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  void _showStoryOptions(BuildContext context, StoryModel story) {
     showModalBottomSheet(
       context: context,
-      builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.report),
-                title: Text(
-                  'Report Story',
-                  style: GoogleFonts.poppins(),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Report feature coming soon!'),
-                      duration: Duration(milliseconds: 500),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.block),
-                title: Text(
-                  'Block User',
-                  style: GoogleFonts.poppins(),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Block feature coming soon!'),
-                      duration: Duration(milliseconds: 500),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.report),
+              title: const Text('Report Story'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Report feature coming soon!')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.block),
+              title: const Text('Block User'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Block feature coming soon!')),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _viewStory(StoryModel story) async {
+    try {
+      await _serviceManager.viewStory(story.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Story viewed!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error viewing story: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleLike(StoryModel story) async {
+    try {
+      if (story.hasUserLiked(_serviceManager.currentUserId ?? '')) {
+        // Unlike logic would go here
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unlike feature coming soon!')),
         );
-      },
+      } else {
+        await _serviceManager.likeStory(story.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Story liked!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error liking story: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _shareStory(StoryModel story) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Share feature coming soon!')),
     );
   }
 } 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/app_service_manager.dart';
+import '../../models/chat_model.dart';
 
 class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
@@ -10,11 +12,45 @@ class ChatsScreen extends StatefulWidget {
 
 class _ChatsScreenState extends State<ChatsScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final AppServiceManager _serviceManager = AppServiceManager();
+  
+  List<ChatModel> _chats = [];
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChats();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadChats() async {
+    if (_isLoading) return;
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      final chats = await _serviceManager.getCurrentUserChats();
+      setState(() {
+        _chats = chats;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading chats: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -35,7 +71,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
-              // TODO: Implement search functionality
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Search chats coming soon!'),
@@ -82,17 +117,56 @@ class _ChatsScreenState extends State<ChatsScreen> {
           // Chats List
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () async {
-                // TODO: Implement refresh functionality
-                await Future.delayed(const Duration(seconds: 1));
-              },
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: 15, // Placeholder count
-                itemBuilder: (context, index) {
-                  return _buildChatItem(index);
-                },
-              ),
+              onRefresh: _loadChats,
+              child: _isLoading && _chats.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : _chats.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.chat_bubble_outline,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No chats yet',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Start a conversation with friends',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: () => _showCreateGroupDialog(context),
+                                icon: const Icon(Icons.group_add),
+                                label: const Text('Start Chat'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue[600],
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: _chats.length,
+                          itemBuilder: (context, index) {
+                            return _buildChatItem(_chats[index]);
+                          },
+                        ),
             ),
           ),
         ],
@@ -100,10 +174,14 @@ class _ChatsScreenState extends State<ChatsScreen> {
     );
   }
 
-  Widget _buildChatItem(int index) {
-    final isGroup = index % 3 == 0;
-    final hasUnreadMessages = index % 4 == 0;
-    final lastMessageTime = DateTime.now().subtract(Duration(hours: index + 1));
+  Widget _buildChatItem(ChatModel chat) {
+    final currentUserId = _serviceManager.currentUserId ?? '';
+    final isGroup = chat.type == ChatType.group;
+    final unreadCount = chat.getUnreadCount(currentUserId);
+    final hasUnreadMessages = unreadCount > 0;
+    final displayName = chat.getDisplayName(currentUserId);
+    final avatarUrl = chat.getChatAvatarUrl(currentUserId);
+    final lastMessageTime = chat.lastMessageTime;
     
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -116,10 +194,13 @@ class _ChatsScreenState extends State<ChatsScreen> {
           children: [
             CircleAvatar(
               backgroundColor: isGroup ? Colors.orange[100] : Colors.blue[100],
-              child: Icon(
-                isGroup ? Icons.group : Icons.person,
-                color: isGroup ? Colors.orange[600] : Colors.blue[600],
-              ),
+              backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+              child: avatarUrl == null
+                  ? Icon(
+                      isGroup ? Icons.group : Icons.person,
+                      color: isGroup ? Colors.orange[600] : Colors.blue[600],
+                    )
+                  : null,
             ),
             if (hasUnreadMessages)
               Positioned(
@@ -132,10 +213,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     color: Colors.red,
                     shape: BoxShape.circle,
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Text(
-                      '3',
-                      style: TextStyle(
+                      unreadCount > 9 ? '9+' : unreadCount.toString(),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -147,7 +228,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
           ],
         ),
         title: Text(
-          isGroup ? 'Group ${index + 1}' : 'Friend ${index + 1}',
+          displayName,
           style: GoogleFonts.poppins(
             fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
             fontSize: 16,
@@ -158,9 +239,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isGroup 
-                ? 'Group message ${index + 1}'
-                : 'Direct message ${index + 1}',
+              chat.lastMessageContent ?? 'No messages yet',
               style: GoogleFonts.poppins(
                 fontSize: 14,
                 color: hasUnreadMessages ? Colors.grey[800] : Colors.grey[600],
@@ -172,7 +251,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
             const SizedBox(height: 2),
             Row(
               children: [
-                if (isGroup) ...[
+                if (chat.isEncrypted) ...[
                   Icon(
                     Icons.lock,
                     size: 12,
@@ -190,7 +269,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   const SizedBox(width: 8),
                 ],
                 Text(
-                  _formatTime(lastMessageTime),
+                  lastMessageTime != null ? _formatTime(lastMessageTime) : '',
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     color: Colors.grey[500],
@@ -200,190 +279,126 @@ class _ChatsScreenState extends State<ChatsScreen> {
             ),
           ],
         ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (hasUnreadMessages)
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Colors.blue,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            const SizedBox(height: 4),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: Colors.grey[400],
-            ),
-          ],
-        ),
-        onTap: () {
-          _navigateToChat(context, index, isGroup);
-        },
-        onLongPress: () {
-          _showChatOptions(context, index, isGroup);
-        },
+        onTap: () => _openChat(chat),
+        onLongPress: () => _showChatOptions(context, chat),
       ),
     );
   }
 
-  String _formatTime(DateTime time) {
+  String _formatTime(DateTime dateTime) {
     final now = DateTime.now();
-    final difference = now.difference(time);
+    final difference = now.difference(dateTime);
     
     if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
+      return '${difference.inDays}d';
     } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
+      return '${difference.inHours}h';
     } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
+      return '${difference.inMinutes}m';
     } else {
-      return 'Just now';
+      return 'now';
     }
-  }
-
-  void _navigateToChat(BuildContext context, int index, bool isGroup) {
-    // TODO: Navigate to chat screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${isGroup ? 'Group' : 'Direct'} chat ${index + 1} coming soon!'),
-        duration: const Duration(milliseconds: 500),
-      ),
-    );
   }
 
   void _showCreateGroupDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(
-            'Create New Group',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                decoration: InputDecoration(
-                  labelText: 'Group Name',
-                  hintText: 'Enter group name',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Create Group Chat',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              decoration: InputDecoration(
+                labelText: 'Group Name',
+                hintText: 'Enter group name',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                decoration: InputDecoration(
-                  labelText: 'Add Friends',
-                  hintText: 'Search and add friends',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Groups can have up to 10 members',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: Colors.grey[600]),
               ),
             ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Create group feature coming soon!'),
-                    duration: Duration(milliseconds: 500),
-                  ),
-                );
-              },
-              child: const Text('Create'),
+            const SizedBox(height: 16),
+            TextField(
+              decoration: InputDecoration(
+                labelText: 'Description (Optional)',
+                hintText: 'Enter group description',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              maxLines: 2,
             ),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Create group feature coming soon!')),
+              );
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
     );
   }
 
-  void _showChatOptions(BuildContext context, int index, bool isGroup) {
+  void _openChat(ChatModel chat) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Opening chat with ${chat.getDisplayName(_serviceManager.currentUserId ?? '')}')),
+    );
+  }
+
+  void _showChatOptions(BuildContext context, ChatModel chat) {
     showModalBottomSheet(
       context: context,
-      builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.notifications_off),
-                title: Text(
-                  'Mute Notifications',
-                  style: GoogleFonts.poppins(),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Mute feature coming soon!'),
-                      duration: Duration(milliseconds: 500),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete),
-                title: Text(
-                  'Delete Chat',
-                  style: GoogleFonts.poppins(),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Delete chat feature coming soon!'),
-                      duration: Duration(milliseconds: 500),
-                    ),
-                  );
-                },
-              ),
-              if (isGroup)
-                ListTile(
-                  leading: const Icon(Icons.group),
-                  title: Text(
-                    'Group Settings',
-                    style: GoogleFonts.poppins(),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Group settings coming soon!'),
-                        duration: Duration(milliseconds: 500),
-                      ),
-                    );
-                  },
-                ),
-            ],
-          ),
-        );
-      },
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.notifications_off),
+              title: const Text('Mute Chat'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Mute feature coming soon!')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.archive),
+              title: const Text('Archive Chat'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Archive feature coming soon!')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete),
+              title: const Text('Delete Chat'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Delete feature coming soon!')),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 } 

@@ -29,8 +29,8 @@ class ChatDatabaseService {
         type: ChatType.direct,
         participants: [userId1, userId2],
         participantNames: {
-          userId1: users.firstWhere((u) => u.uid == userId1).username,
-          userId2: users.firstWhere((u) => u.uid == userId2).username,
+          userId1: users.firstWhere((u) => u.uid == userId1).handle,
+          userId2: users.firstWhere((u) => u.uid == userId2).handle,
         },
         participantAvatars: {
           userId1: users.firstWhere((u) => u.uid == userId1).profilePictureUrl ?? '',
@@ -80,7 +80,7 @@ class ChatDatabaseService {
       final memberRoles = <String, String>{};
 
       for (final user in users) {
-        participantNames[user.uid] = user.username;
+        participantNames[user.uid] = user.handle;
         participantAvatars[user.uid] = user.profilePictureUrl ?? '';
         memberRoles[user.uid] = user.uid == creatorId ? 'admin' : 'member';
       }
@@ -186,7 +186,7 @@ class ChatDatabaseService {
         id: messageId,
         chatId: chatId,
         senderId: senderId,
-        senderUsername: sender.username,
+        senderUsername: sender.handle,
         senderProfilePicture: sender.profilePictureUrl,
         type: type,
         content: content,
@@ -349,7 +349,7 @@ class ChatDatabaseService {
 
       await _chatsCollection.doc(chatId).update({
         'participants': FieldValue.arrayUnion([memberId]),
-        'participantNames.$memberId': newMember.username,
+        'participantNames.$memberId': newMember.handle,
         'participantAvatars.$memberId': newMember.profilePictureUrl ?? '',
         'memberRoles.$memberId': 'member',
         'updatedAt': Timestamp.fromDate(DateTime.now()),

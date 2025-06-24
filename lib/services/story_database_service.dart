@@ -34,7 +34,7 @@ class StoryDatabaseService {
       final story = StoryModel(
         id: storyId,
         uid: uid,
-        creatorUsername: user.username,
+        creatorUsername: user.handle,
         creatorProfilePicture: user.profilePictureUrl,
         type: type,
         visibility: visibility,

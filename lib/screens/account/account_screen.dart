@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/user_database_service.dart';
+import '../../models/user_model.dart';
 import '../auth/login_screen.dart';
+import 'dart:async';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -16,6 +19,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     final authService = context.watch<AuthService>();
     final user = authService.user;
+    final userModel = authService.userModel;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -43,11 +47,11 @@ class _AccountScreenState extends State<AccountScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Profile Card
-              _buildProfileCard(user),
+              _buildProfileCard(user, userModel),
               const SizedBox(height: 24),
 
               // Quick Stats
-              _buildQuickStats(),
+              _buildQuickStats(userModel),
               const SizedBox(height: 24),
 
               // Settings Section
@@ -98,135 +102,206 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
-  Widget _buildProfileCard(user) {
+  Widget _buildProfileCard(user, UserModel? userModel) {
+    final displayName = userModel?.displayName ?? user?.displayName ?? user?.email ?? 'User';
+    final profilePicture = userModel?.profilePictureUrl ?? user?.photoURL;
+    final handle = userModel?.handle ?? '';
+    final bio = userModel?.bio ?? '';
+    final isOnline = userModel?.isOnline ?? false;
+    final lastSeen = userModel?.lastSeen;
+    final createdAt = userModel?.createdAt;
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            Row(
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
               children: [
-                // User Avatar
+                // User Avatar at the top
                 CircleAvatar(
-                  radius: 40,
+                  radius: 50,
                   backgroundColor: Colors.blue[100],
-                  backgroundImage: user?.photoURL != null
-                      ? NetworkImage(user!.photoURL!)
+                  backgroundImage: profilePicture != null
+                      ? NetworkImage(profilePicture)
                       : null,
-                  child: user?.photoURL == null
+                  child: profilePicture == null
                       ? Icon(
                           Icons.person,
-                          size: 40,
+                          size: 50,
                           color: Colors.blue[600],
                         )
                       : null,
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user?.displayName ?? user?.email ?? 'User',
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
+                const SizedBox(height: 16),
+                
+                // User Info below avatar
+                Column(
+                  children: [
+                    Text(
+                      displayName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
                       ),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (handle.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      if (user?.email != null)
-                        Text(
-                          user!.email!,
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: Colors.grey[600],
+                      Text(
+                        handle,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isOnline ? Colors.green[100] : Colors.grey[100],
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            isOnline ? 'Online' : 'Offline',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isOnline ? Colors.green[700] : Colors.grey[700],
+                            ),
                           ),
                         ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.green[100],
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              'Verified',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.green[700],
-                              ),
-                            ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
                           ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
+                          decoration: BoxDecoration(
+                            color: user?.providerData.isNotEmpty == true &&
+                                    user!.providerData.first.providerId == 'google.com'
+                                ? Colors.blue[100]
+                                : Colors.orange[100],
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            user?.providerData.isNotEmpty == true &&
+                                    user!.providerData.first.providerId == 'google.com'
+                                ? 'Google'
+                                : 'Email',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
                               color: user?.providerData.isNotEmpty == true &&
                                       user!.providerData.first.providerId == 'google.com'
-                                  ? Colors.blue[100]
-                                  : Colors.orange[100],
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              user?.providerData.isNotEmpty == true &&
-                                      user!.providerData.first.providerId == 'google.com'
-                                  ? 'Google'
-                                  : 'Email',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: user?.providerData.isNotEmpty == true &&
-                                        user!.providerData.first.providerId == 'google.com'
-                                    ? Colors.blue[700]
-                                    : Colors.orange[700],
-                              ),
+                                  ? Colors.blue[700]
+                                  : Colors.orange[700],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                
+                if (bio.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    bio,
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.grey[700],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildStatItem('Stories', userModel?.storiesCount.toString() ?? '0'),
+                    _buildStatItem('Friends', userModel?.friendsCount.toString() ?? '0'),
+                    _buildStatItem('Member Since', _formatDate(createdAt)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          // Edit button positioned at the top right
+          Positioned(
+            top: 8,
+            right: 8,
+            child: PopupMenuButton<String>(
+              icon: const Icon(Icons.edit),
+              onSelected: (value) {
+                if (value == 'edit_handle') {
+                  _showEditHandleDialog(context, userModel);
+                } else if (value == 'edit_profile') {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Edit profile coming soon!'),
+                      duration: Duration(milliseconds: 500),
+                    ),
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'edit_handle',
+                  child: Row(
+                    children: [
+                      Icon(Icons.alternate_email, color: Colors.blue[600]),
+                      const SizedBox(width: 8),
+                      Text('Change Handle', style: GoogleFonts.poppins()),
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Edit profile coming soon!'),
-                        duration: Duration(milliseconds: 500),
-                      ),
-                    );
-                  },
+                PopupMenuItem(
+                  value: 'edit_profile',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person, color: Colors.blue[600]),
+                      const SizedBox(width: 8),
+                      Text('Edit Profile', style: GoogleFonts.poppins()),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildStatItem('Stories', '12'),
-                _buildStatItem('Friends', '45'),
-                _buildStatItem('Views', '1.2K'),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'N/A';
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()}y';
+    } else if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()}mo';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d';
+    } else {
+      return 'Today';
+    }
   }
 
   Widget _buildStatItem(String label, String value) {
@@ -251,24 +326,29 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
-  Widget _buildQuickStats() {
+  Widget _buildQuickStats(UserModel? userModel) {
+    final friendsCount = userModel?.friendsCount ?? 0;
+    final storiesCount = userModel?.storiesCount ?? 0;
+    final lastSeen = userModel?.lastSeen;
+    final isOnline = userModel?.isOnline ?? false;
+
     return Row(
       children: [
         Expanded(
           child: _buildQuickStatCard(
-            icon: Icons.visibility,
-            title: 'Profile Views',
-            value: '156',
+            icon: Icons.people,
+            title: 'Friends',
+            value: friendsCount.toString(),
             color: Colors.blue,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: _buildQuickStatCard(
-            icon: Icons.favorite,
-            title: 'Total Likes',
-            value: '892',
-            color: Colors.red,
+            icon: Icons.photo_library,
+            title: 'Stories',
+            value: storiesCount.toString(),
+            color: Colors.purple,
           ),
         ),
       ],
@@ -590,6 +670,221 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showEditHandleDialog(BuildContext context, UserModel? userModel) {
+    final handleController = TextEditingController(text: userModel?.handle.replaceFirst('@', '') ?? '');
+    bool isLoading = false;
+    String? validationError;
+    bool isCheckingHandle = false;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            // Function to validate handle
+            Future<void> validateHandle(String handle) async {
+              if (handle.isEmpty) {
+                setState(() {
+                  validationError = null;
+                  isCheckingHandle = false;
+                });
+                return;
+              }
+
+              if (handle.length < 3) {
+                setState(() {
+                  validationError = 'Handle must be at least 3 characters';
+                  isCheckingHandle = false;
+                });
+                return;
+              }
+
+              if (!RegExp(r'^[a-z0-9-]+$').hasMatch(handle)) {
+                setState(() {
+                  validationError = 'Handle can only contain lowercase letters, numbers, and hyphens';
+                  isCheckingHandle = false;
+                });
+                return;
+              }
+
+              // Check if handle is the same as current
+              final currentHandle = userModel?.handle.replaceFirst('@', '') ?? '';
+              if (handle.toLowerCase() == currentHandle.toLowerCase()) {
+                setState(() {
+                  validationError = null;
+                  isCheckingHandle = false;
+                });
+                return;
+              }
+
+              setState(() {
+                isCheckingHandle = true;
+                validationError = null;
+              });
+
+              try {
+                final isAvailable = await UserDatabaseService.isHandleAvailable('@$handle', excludeUserId: userModel?.uid);
+                setState(() {
+                  isCheckingHandle = false;
+                  if (!isAvailable) {
+                    validationError = 'Handle is already taken';
+                  } else {
+                    validationError = null;
+                  }
+                });
+              } catch (e) {
+                setState(() {
+                  isCheckingHandle = false;
+                  validationError = 'Error checking handle availability';
+                });
+              }
+            }
+
+            // Debounced validation
+            Timer? debounceTimer;
+            void debouncedValidate(String handle) {
+              debounceTimer?.cancel();
+              debounceTimer = Timer(const Duration(milliseconds: 500), () {
+                validateHandle(handle);
+              });
+            }
+
+            return AlertDialog(
+              title: Text(
+                'Change Handle',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Your handle must be unique and can contain letters, numbers, and hyphens.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: handleController,
+                    decoration: InputDecoration(
+                      labelText: 'Handle',
+                      hintText: 'Enter your new handle (without @)',
+                      prefixText: '@',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.blue[600]!),
+                      ),
+                      suffixIcon: isCheckingHandle
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          : null,
+                    ),
+                    enabled: !isLoading,
+                    onChanged: (value) {
+                      debouncedValidate(value);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        validationError != null ? Icons.error_outline : Icons.check_circle_outline,
+                        size: 16,
+                        color: validationError != null ? Colors.red[400] : Colors.grey[500],
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          validationError ?? 'Handle is available',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: validationError != null ? Colors.red[400] : Colors.grey[500],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.of(context).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ),
+                TextButton(
+                  onPressed: (isLoading || validationError != null || isCheckingHandle) 
+                      ? null 
+                      : () async {
+                          final newHandle = handleController.text.trim();
+                          if (newHandle.isEmpty) return;
+
+                          setState(() => isLoading = true);
+
+                          try {
+                            final authService = context.read<AuthService>();
+                            await authService.updateHandle(newHandle);
+                            
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Handle updated successfully!'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            print('Error updating handle: $e'); // Debug log
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error updating handle: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (context.mounted) {
+                              setState(() => isLoading = false);
+                            }
+                          }
+                        },
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(
+                          'Confirm',
+                          style: TextStyle(color: Colors.blue[600]),
+                        ),
+                ),
+              ],
+            );
+          },
         );
       },
     );

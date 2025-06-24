@@ -16,7 +16,6 @@ class _SignupScreenState extends State<SignupScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _displayNameController = TextEditingController();
-  final _usernameController = TextEditingController();
   bool _isLoading = false;
   bool _isGoogleLoading = false;
   bool _obscurePassword = true;
@@ -28,7 +27,6 @@ class _SignupScreenState extends State<SignupScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _displayNameController.dispose();
-    _usernameController.dispose();
     super.dispose();
   }
 
@@ -39,11 +37,14 @@ class _SignupScreenState extends State<SignupScreen> {
 
     try {
       final authService = context.read<AuthService>();
+      
+      String username = _displayNameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      
       await authService.signUpWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         displayName: _displayNameController.text.trim(),
-        username: _usernameController.text.trim(),
+        username: username,
       );
       
       if (mounted) {
@@ -259,40 +260,6 @@ class _SignupScreenState extends State<SignupScreen> {
                       }
                       if (value.length < 2) {
                         return 'Display name must be at least 2 characters';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Username Field
-                  TextFormField(
-                    controller: _usernameController,
-                    decoration: InputDecoration(
-                      labelText: 'Username',
-                      hintText: 'Enter your username',
-                      prefixIcon: const Icon(Icons.alternate_email_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.blue[600]!),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a username';
-                      }
-                      if (value.length < 3) {
-                        return 'Username must be at least 3 characters';
-                      }
-                      if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(value)) {
-                        return 'Username can only contain letters, numbers, and underscores';
                       }
                       return null;
                     },

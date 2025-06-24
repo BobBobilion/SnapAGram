@@ -25,6 +25,16 @@ class AuthService extends ChangeNotifier {
         
         // Load user model
         _userModel = await UserDatabaseService.getUserById(user.uid);
+        
+        // Migrate user to handle if needed (for backward compatibility)
+        if (_userModel != null && _userModel!.handle.isEmpty) {
+          try {
+            await UserDatabaseService.migrateUserToHandle(user.uid);
+            _userModel = await UserDatabaseService.getUserById(user.uid);
+          } catch (e) {
+            print('Failed to migrate user to handle: $e');
+          }
+        }
       } else {
         // Update offline status for previous user
         if (_userModel != null) {
@@ -57,7 +67,6 @@ class AuthService extends ChangeNotifier {
           uid: result.user!.uid,
           email: email,
           displayName: displayName,
-          username: username,
           profilePictureUrl: result.user!.photoURL,
         );
         
@@ -89,7 +98,7 @@ class AuthService extends ChangeNotifier {
   }
 
   // Sign in with Google
-  Future<UserCredential?> signInWithGoogle({String? username}) async {
+  Future<UserCredential?> signInWithGoogle() async {
     try {
       // Trigger the authentication flow
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
@@ -115,12 +124,13 @@ class AuthService extends ChangeNotifier {
         _userModel = await UserDatabaseService.getUserById(result.user!.uid);
         
         // If user doesn't exist in Firestore, create profile
-        if (_userModel == null && username != null) {
+        if (_userModel == null) {
+          final displayName = result.user!.displayName ?? 'User';
+          
           await UserDatabaseService.createUserProfile(
             uid: result.user!.uid,
             email: result.user!.email ?? '',
-            displayName: result.user!.displayName ?? '',
-            username: username,
+            displayName: displayName,
             profilePictureUrl: result.user!.photoURL,
           );
           
@@ -180,7 +190,6 @@ class AuthService extends ChangeNotifier {
     String? displayName,
     String? photoURL,
     String? bio,
-    String? username,
   }) async {
     try {
       if (_user == null) throw Exception('User not authenticated');
@@ -200,15 +209,53 @@ class AuthService extends ChangeNotifier {
         _userModel = await UserDatabaseService.getUserById(_user!.uid);
       }
       
-      // Username requires special handling
-      if (username != null && _userModel != null && username != _userModel!.username) {
-        await UserDatabaseService.updateUsername(_user!.uid, username);
-        _userModel = await UserDatabaseService.getUserById(_user!.uid);
-      }
-      
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to update profile: $e');
+    }
+  }
+
+  // Update display name (with handle regeneration)
+  Future<void> updateDisplayName(String newDisplayName) async {
+    try {
+      if (_user == null) throw Exception('User not authenticated');
+      
+      // Update Firebase Auth profile
+      await _user!.updateDisplayName(newDisplayName);
+      
+      // Update Firestore profile with new handle
+      await UserDatabaseService.updateHandle(_user!.uid, newDisplayName);
+      
+      // Reload user model
+      _userModel = await UserDatabaseService.getUserById(_user!.uid);
+      
+      notifyListeners();
+    } catch (e) {
+      throw Exception('Failed to update display name: $e');
+    }
+  }
+
+  // Update handle
+  Future<void> updateHandle(String newHandle) async {
+    try {
+      if (_user == null) throw Exception('User not authenticated');
+      
+      print('Updating handle to: $newHandle for user: ${_user!.uid}'); // Debug log
+      
+      // Update Firestore profile with new handle
+      await UserDatabaseService.updateHandle(_user!.uid, newHandle);
+      
+      print('Handle updated successfully in database'); // Debug log
+      
+      // Reload user model
+      _userModel = await UserDatabaseService.getUserById(_user!.uid);
+      
+      print('New user model handle: ${_userModel?.handle}'); // Debug log
+      
+      notifyListeners();
+    } catch (e) {
+      print('Error in updateHandle: $e'); // Debug log
+      throw Exception('Failed to update handle: $e');
     }
   }
 
@@ -218,10 +265,9 @@ class AuthService extends ChangeNotifier {
     return UserDatabaseService.listenToUser(_user!.uid);
   }
 
-  // Check if username is available
-  Future<bool> isUsernameAvailable(String username) async {
-    final user = await UserDatabaseService.getUserByUsername(username);
-    return user == null;
+  // Check if handle is available
+  Future<bool> isHandleAvailable(String handle) async {
+    return await UserDatabaseService.isHandleAvailable(handle);
   }
 
   // Handle Firebase Auth exceptions

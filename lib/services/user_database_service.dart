@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math';
 import '../models/user_model.dart';
 
 class UserDatabaseService {
@@ -8,28 +9,98 @@ class UserDatabaseService {
   
   // Collection references
   static final CollectionReference _usersCollection = _firestore.collection('users');
-  static final CollectionReference _usernamesCollection = _firestore.collection('usernames');
+  static final CollectionReference _handlesCollection = _firestore.collection('handles');
+
+  // Generate a unique handle from display name
+  static String _generateHandleFromName(String displayName) {
+    // Convert to lowercase and replace spaces with hyphens
+    String baseHandle = displayName.toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s-]'), '') // Remove special characters except spaces and hyphens
+        .replaceAll(RegExp(r'\s+'), '-') // Replace spaces with hyphens
+        .replaceAll(RegExp(r'-+'), '-') // Replace multiple hyphens with single hyphen
+        .trim();
+    
+    // Remove leading/trailing hyphens
+    baseHandle = baseHandle.replaceAll(RegExp(r'^-+|-+$'), '');
+    
+    // If empty after cleaning, use 'user'
+    if (baseHandle.isEmpty) {
+      baseHandle = 'user';
+    }
+    
+    return baseHandle;
+  }
+
+  // Generate a unique handle with random numbers
+  static Future<String> generateUniqueHandle(String displayName, {String? excludeUserId}) async {
+    String baseHandle = _generateHandleFromName(displayName);
+    String handle = '@$baseHandle';
+    
+    // Check if base handle is available
+    if (await isHandleAvailable(handle, excludeUserId: excludeUserId)) {
+      return handle;
+    }
+    
+    // Try with random numbers
+    final random = Random();
+    int attempts = 0;
+    const maxAttempts = 100;
+    
+    while (attempts < maxAttempts) {
+      int randomNumber = random.nextInt(9999) + 1; // 1-9999
+      handle = '@$baseHandle-$randomNumber';
+      
+      if (await isHandleAvailable(handle, excludeUserId: excludeUserId)) {
+        return handle;
+      }
+      
+      attempts++;
+    }
+    
+    // If still not available, use timestamp
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    handle = '@$baseHandle-$timestamp';
+    
+    return handle;
+  }
+
+  // Check if handle is available
+  static Future<bool> isHandleAvailable(String handle, {String? excludeUserId}) async {
+    try {
+      final doc = await _handlesCollection.doc(handle.toLowerCase()).get();
+      if (!doc.exists) return true;
+      
+      // If we're excluding a specific user, check if this handle belongs to them
+      if (excludeUserId != null) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data['uid'] == excludeUserId) {
+          return true; // Handle belongs to the current user, so it's available
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
 
   // Create user profile after authentication
   static Future<void> createUserProfile({
     required String uid,
     required String email,
     required String displayName,
-    required String username,
     String? profilePictureUrl,
   }) async {
     try {
-      // Check if username is available
-      if (!await _isUsernameAvailable(username)) {
-        throw Exception('Username is already taken');
-      }
+      // Generate unique handle
+      final handle = await generateUniqueHandle(displayName);
 
       final now = DateTime.now();
       final user = UserModel(
         uid: uid,
         email: email,
         displayName: displayName,
-        username: username,
+        handle: handle,
         profilePictureUrl: profilePictureUrl,
         createdAt: now,
         lastSeen: now,
@@ -41,9 +112,9 @@ class UserDatabaseService {
       
       // Create user document
       batch.set(_usersCollection.doc(uid), user.toMap());
-      
-      // Reserve username
-      batch.set(_usernamesCollection.doc(username.toLowerCase()), {
+
+      // Reserve handle
+      batch.set(_handlesCollection.doc(handle.toLowerCase()), {
         'uid': uid,
         'createdAt': Timestamp.fromDate(now),
       });
@@ -65,26 +136,20 @@ class UserDatabaseService {
     }
   }
 
-  // Get user by username
-  static Future<UserModel?> getUserByUsername(String username) async {
+  // Get user by handle
+  static Future<UserModel?> getUserByHandle(String handle) async {
     try {
-      final usernameDoc = await _usernamesCollection.doc(username.toLowerCase()).get();
-      if (!usernameDoc.exists) return null;
+      // Remove all leading @ and prepend a single @
+      String cleanHandle = handle.replaceFirst(RegExp(r'^@+'), '');
+      cleanHandle = '@$cleanHandle';
       
-      final data = usernameDoc.data() as Map<String, dynamic>;
+      final handleDoc = await _handlesCollection.doc(cleanHandle.toLowerCase()).get();
+      if (!handleDoc.exists) return null;
+      
+      final data = handleDoc.data() as Map<String, dynamic>;
       return await getUserById(data['uid']);
     } catch (e) {
-      throw Exception('Failed to get user by username: $e');
-    }
-  }
-
-  // Check if username is available
-  static Future<bool> _isUsernameAvailable(String username) async {
-    try {
-      final doc = await _usernamesCollection.doc(username.toLowerCase()).get();
-      return !doc.exists;
-    } catch (e) {
-      return false;
+      throw Exception('Failed to get user by handle: $e');
     }
   }
 
@@ -109,23 +174,107 @@ class UserDatabaseService {
     }
   }
 
-  // Search users by username
+  // Search users by handle and display name
   static Future<List<UserModel>> searchUsers(String query) async {
     try {
       if (query.isEmpty) return [];
       
-      // Search by username (case-insensitive)
-      final querySnapshot = await _usersCollection
-          .where('username', isGreaterThanOrEqualTo: query.toLowerCase())
-          .where('username', isLessThanOrEqualTo: query.toLowerCase() + '\uf8ff')
+      // Convert query to lowercase for case-insensitive search
+      String lowerQuery = query.toLowerCase();
+      // Remove all leading @ and prepend a single @
+      String handleQuery = '@' + lowerQuery.replaceFirst(RegExp(r'^@+'), '');
+      print('[DEBUG] Searching for handle prefix: $handleQuery');
+      final handleQuerySnapshot = await _usersCollection
+          .where('handle', isGreaterThanOrEqualTo: handleQuery)
+          .where('handle', isLessThanOrEqualTo: handleQuery + '\uf8ff')
           .limit(20)
+          .get();
+
+      print('[DEBUG] Firestore returned ${handleQuerySnapshot.docs.length} docs for handle prefix search');
+
+      List<UserModel> results = handleQuerySnapshot.docs
+          .map((doc) => UserModel.fromSnapshot(doc))
+          .toList();
+
+      // If we don't have enough results, also search by display name
+      if (results.length < 10) {
+        final displayNameQuery = await _usersCollection
+            .where('displayName', isGreaterThanOrEqualTo: lowerQuery)
+            .where('displayName', isLessThanOrEqualTo: lowerQuery + '\uf8ff')
+            .limit(10)
+            .get();
+
+        print('[DEBUG] Firestore returned ${displayNameQuery.docs.length} docs for displayName prefix search');
+
+        final displayNameResults = displayNameQuery.docs
+            .map((doc) => UserModel.fromSnapshot(doc))
+            .toList();
+
+        // Combine results and remove duplicates
+        for (final user in displayNameResults) {
+          if (!results.any((existing) => existing.uid == user.uid)) {
+            results.add(user);
+          }
+        }
+      }
+
+      print('[DEBUG] Returning ${results.length} total search results');
+      return results;
+    } catch (e) {
+      print('[DEBUG] Exception in searchUsers: $e');
+      throw Exception('Failed to search users: $e');
+    }
+  }
+
+  // Get all users (for debugging)
+  static Future<List<UserModel>> getAllUsers() async {
+    try {
+      final querySnapshot = await _usersCollection
+          .orderBy('handle')
+          .limit(100)
           .get();
 
       return querySnapshot.docs
           .map((doc) => UserModel.fromSnapshot(doc))
           .toList();
     } catch (e) {
-      throw Exception('Failed to search users: $e');
+      throw Exception('Failed to get all users: $e');
+    }
+  }
+
+  // Get all handles (for debugging)
+  static Future<List<String>> getAllHandles() async {
+    try {
+      final querySnapshot = await _usersCollection
+          .orderBy('handle')
+          .limit(100)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => (doc.data() as Map<String, dynamic>)['handle'] as String)
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to get all handles: $e');
+    }
+  }
+
+  // Get all users with handle and display name (for debugging)
+  static Future<List<Map<String, String>>> getAllUserIdentifiers() async {
+    try {
+      final querySnapshot = await _usersCollection
+          .orderBy('handle')
+          .limit(100)
+          .get();
+
+      return querySnapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return {
+          'handle': data['handle'] as String,
+          'displayName': data['displayName'] as String,
+        };
+      }).toList();
+    } catch (e) {
+      throw Exception('Failed to get all user identifiers: $e');
     }
   }
 
@@ -346,11 +495,14 @@ class UserDatabaseService {
     }
   }
 
-  // Update username
-  static Future<void> updateUsername(String userId, String newUsername) async {
+  // Update handle
+  static Future<void> updateHandle(String userId, String newHandle) async {
     try {
-      if (!await _isUsernameAvailable(newUsername)) {
-        throw Exception('Username is already taken');
+      // Add @ symbol if not present
+      String fullHandle = newHandle.startsWith('@') ? newHandle : '@$newHandle';
+      
+      if (!await isHandleAvailable(fullHandle, excludeUserId: userId)) {
+        throw Exception('Handle is already taken');
       }
       
       final user = await getUserById(userId);
@@ -358,23 +510,54 @@ class UserDatabaseService {
       
       final batch = _firestore.batch();
       
-      // Remove old username
-      batch.delete(_usernamesCollection.doc(user.username.toLowerCase()));
+      // Remove old handle
+      batch.delete(_handlesCollection.doc(user.handle.toLowerCase()));
       
-      // Add new username
-      batch.set(_usernamesCollection.doc(newUsername.toLowerCase()), {
+      // Add new handle
+      batch.set(_handlesCollection.doc(fullHandle.toLowerCase()), {
         'uid': userId,
         'createdAt': Timestamp.fromDate(DateTime.now()),
       });
       
       // Update user document
       batch.update(_usersCollection.doc(userId), {
-        'username': newUsername,
+        'handle': fullHandle,
       });
       
       await batch.commit();
     } catch (e) {
-      throw Exception('Failed to update username: $e');
+      throw Exception('Failed to update handle: $e');
+    }
+  }
+
+  // Migrate existing user to have a handle (for backward compatibility)
+  static Future<void> migrateUserToHandle(String userId) async {
+    try {
+      final user = await getUserById(userId);
+      if (user == null) throw Exception('User not found');
+      
+      // If user already has a handle, no need to migrate
+      if (user.handle.isNotEmpty) return;
+      
+      // Generate handle from display name
+      final handle = await generateUniqueHandle(user.displayName);
+      
+      final batch = _firestore.batch();
+      
+      // Add handle to user document
+      batch.update(_usersCollection.doc(userId), {
+        'handle': handle,
+      });
+      
+      // Reserve handle
+      batch.set(_handlesCollection.doc(handle.toLowerCase()), {
+        'uid': userId,
+        'createdAt': Timestamp.fromDate(DateTime.now()),
+      });
+      
+      await batch.commit();
+    } catch (e) {
+      throw Exception('Failed to migrate user to handle: $e');
     }
   }
 } 
