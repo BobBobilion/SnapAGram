@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../services/app_service_manager.dart';
+import '../../services/storage_service.dart';
 import '../../models/chat_model.dart';
 import '../../models/message_model.dart';
 import '../../models/user_model.dart';
@@ -26,13 +29,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final AppServiceManager _serviceManager = AppServiceManager();
+  final ImagePicker _imagePicker = ImagePicker();
   
   ChatModel? _chat;
   List<MessageModel> _messages = [];
   UserModel? _otherUser; // Store the other user's data
   bool _isLoading = false;
   bool _isSending = false;
+  bool _isUploadingImage = false;
   Timer? _messageTimer;
+  StreamSubscription<List<MessageModel>>? _messagesSubscription;
+  Set<String> _deletingMessages = {}; // Track messages being deleted
 
   @override
   void initState() {
@@ -46,6 +53,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _messageTimer?.cancel();
+    _messagesSubscription?.cancel();
     super.dispose();
   }
 
@@ -55,18 +63,45 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     });
   }
 
+  void _startListeningToMessages() {
+    _messagesSubscription = _serviceManager.getChatMessagesStream(widget.chatId)
+        .listen((messages) {
+      if (mounted) {
+        final filteredMessages = _filterExpiredMessages(messages);
+        setState(() {
+          _messages = filteredMessages;
+        });
+      }
+    }, onError: (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading messages: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    });
+  }
+
   void _updateMessageTimers() {
     final now = DateTime.now();
     final expiredMessages = <MessageModel>[];
     
     for (final message in _messages) {
       final timeElapsed = now.difference(message.createdAt).inSeconds;
-      if (timeElapsed >= 30) {
+      // Only consider message expired if it's not already being deleted
+      if (timeElapsed >= 30 && !_deletingMessages.contains(message.id)) {
         expiredMessages.add(message);
       }
     }
     
     if (expiredMessages.isNotEmpty) {
+      // Mark messages as being deleted to prevent duplicate deletion attempts
+      for (final message in expiredMessages) {
+        _deletingMessages.add(message.id);
+      }
+      
       // Delete expired messages from server
       _deleteExpiredMessagesFromServer(expiredMessages);
       
@@ -88,7 +123,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         print('ChatConversationScreen: Deleted expired message ${message.id} from server');
       } catch (e) {
         print('ChatConversationScreen: Failed to delete expired message ${message.id}: $e');
-        // Continue with other messages even if one fails
+        // Remove from deleting set so it can be retried later if needed
+        _deletingMessages.remove(message.id);
       }
     }
   }
@@ -101,14 +137,23 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     for (final message in messages) {
       final timeElapsed = now.difference(message.createdAt).inSeconds;
       if (timeElapsed >= 30) {
-        expiredMessages.add(message);
+        // Only add to expired list if not already being deleted
+        if (!_deletingMessages.contains(message.id)) {
+          expiredMessages.add(message);
+        }
       } else {
         validMessages.add(message);
+        // Remove from deleting set if it's still valid (might have been re-created)
+        _deletingMessages.remove(message.id);
       }
     }
     
     // Delete any expired messages found during reload
     if (expiredMessages.isNotEmpty) {
+      // Mark messages as being deleted
+      for (final message in expiredMessages) {
+        _deletingMessages.add(message.id);
+      }
       _deleteExpiredMessagesFromServer(expiredMessages);
     }
     
@@ -142,13 +187,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         }
       }
 
-      // Load messages and filter out expired ones
-      final messages = await _serviceManager.getChatMessages(widget.chatId);
-      final filteredMessages = _filterExpiredMessages(messages);
-      setState(() {
-        _messages = filteredMessages;
-        _isLoading = false;
-      });
+      // Start listening to messages stream
+      _startListeningToMessages();
+      
+      setState(() => _isLoading = false);
 
       // Mark messages as read
       if (chat != null) {
@@ -175,32 +217,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _messageController.clear();
 
     try {
-      final messageId = await _serviceManager.sendMessage(
+      await _serviceManager.sendMessage(
         chatId: widget.chatId,
         type: MessageType.text,
         content: message,
       );
       
-      // Create a local message object and add it to the list
-      // This avoids reloading all messages which could bring back expired ones
-      final currentUser = _serviceManager.currentUser;
-      if (currentUser != null) {
-        final newMessage = MessageModel(
-          id: messageId,
-          chatId: widget.chatId,
-          senderId: currentUser.uid,
-          senderUsername: currentUser.handle,
-          senderProfilePicture: currentUser.profilePictureUrl,
-          type: MessageType.text,
-          content: message,
-          createdAt: DateTime.now(),
-        );
-        
-        setState(() {
-          _messages.insert(0, newMessage); // Insert at the beginning (reverse order)
-        });
-      }
-      
+      // The real-time stream will automatically update the UI with the new message
       // Scroll to bottom
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -221,6 +244,115 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     } finally {
       setState(() => _isSending = false);
     }
+  }
+
+  Future<void> _pickAndSendImage() async {
+    if (_isUploadingImage) return;
+
+    try {
+      // Show options to take photo or pick from gallery
+      final ImageSource? source = await _showImageSourceDialog();
+      if (source == null) return;
+
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return;
+
+      setState(() => _isUploadingImage = true);
+
+      // Upload image to storage
+      final currentUser = _serviceManager.currentUser;
+      if (currentUser == null) throw Exception('User not authenticated');
+
+      final String imageUrl = await StorageService.uploadChatImageFromBytes(
+        await File(pickedFile.path).readAsBytes(),
+        currentUser.uid,
+        'jpg',
+      );
+
+      // Send image message that expires in 30 seconds
+      await _serviceManager.sendMessage(
+        chatId: widget.chatId,
+        type: MessageType.image,
+        content: imageUrl,
+      );
+
+      // The real-time stream will automatically update the UI with the new message
+      // Scroll to bottom
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+
+      // Delete the temporary file
+      try {
+        await File(pickedFile.path).delete();
+      } catch (e) {
+        print('Error deleting temporary file: $e');
+      }
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sending image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isUploadingImage = false);
+    }
+  }
+
+  Future<ImageSource?> _showImageSourceDialog() async {
+    return await showDialog<ImageSource>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Select Image',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: Text(
+                'Take Photo',
+                style: GoogleFonts.poppins(),
+              ),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: Text(
+                'Choose from Gallery',
+                style: GoogleFonts.poppins(),
+              ),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(color: Colors.grey[600]),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _getChatTitle() {
@@ -360,6 +492,27 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             ),
             child: Row(
               children: [
+                // Camera Button
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: _isUploadingImage
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                            ),
+                          )
+                        : Icon(Icons.camera_alt, color: Colors.grey[600]),
+                    onPressed: _isUploadingImage ? null : _pickAndSendImage,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _messageController,
@@ -471,14 +624,115 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     const SizedBox(height: 2),
                   ],
                   
-                  Text(
-                    isDeleted ? 'This message was deleted' : message.content,
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: isCurrentUser ? Colors.white : Colors.grey[800],
-                      fontStyle: isDeleted ? FontStyle.italic : FontStyle.normal,
+                  // Message content
+                  if (isDeleted)
+                    Text(
+                      'This message was deleted',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isCurrentUser ? Colors.white : Colors.grey[800],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    )
+                  else if (message.type == MessageType.image)
+                    GestureDetector(
+                      onTap: () {
+                        // Show full-screen image viewer
+                        showDialog(
+                          context: context,
+                          builder: (context) => Dialog(
+                            backgroundColor: Colors.transparent,
+                            child: Stack(
+                              children: [
+                                Center(
+                                  child: InteractiveViewer(
+                                    child: Image.network(
+                                      message.content,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 40,
+                                  right: 20,
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 30,
+                                    ),
+                                    onPressed: () => Navigator.pop(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          maxWidth: 200,
+                          maxHeight: 300,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            message.content,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                height: 150,
+                                width: 200,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                height: 150,
+                                width: 200,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.broken_image,
+                                      color: Colors.grey[600],
+                                      size: 32,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Failed to load image',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Text(
+                      message.content,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isCurrentUser ? Colors.white : Colors.grey[800],
+                      ),
                     ),
-                  ),
                   
                   const SizedBox(height: 4),
                   

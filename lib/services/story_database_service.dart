@@ -30,6 +30,12 @@ class StoryDatabaseService {
       final now = DateTime.now();
       final expiresAt = now.add(Duration(hours: 24)); // 24-hour TTL
       
+      // For friends-only stories, set allowedViewers to the user's friends list if not provided
+      List<String> finalAllowedViewers = allowedViewers;
+      if (visibility == StoryVisibility.friends && allowedViewers.isEmpty) {
+        finalAllowedViewers = user.friends;
+      }
+      
       final storyId = _storiesCollection.doc().id;
       final story = StoryModel(
         id: storyId,
@@ -46,7 +52,7 @@ class StoryDatabaseService {
         filters: filters,
         isEncrypted: isEncrypted,
         encryptedKey: encryptedKey,
-        allowedViewers: allowedViewers,
+        allowedViewers: finalAllowedViewers,
       );
 
       final batch = _firestore.batch();
@@ -80,23 +86,40 @@ class StoryDatabaseService {
 
   // Get public stories (Explore feed)
   static Future<List<StoryModel>> getPublicStories({
+    String? userId,
     DocumentSnapshot? lastDocument,
     int limit = 20,
   }) async {
     try {
+      // Get all stories (both public and friends) and filter by user permissions
       Query query = _storiesCollection
-          .where('visibility', isEqualTo: 'public')
           .where('expiresAt', isGreaterThan: Timestamp.fromDate(DateTime.now()))
           .orderBy('expiresAt')
           .orderBy('createdAt', descending: true)
-          .limit(limit);
+          .limit(limit * 2); // Get more to account for filtering
 
       if (lastDocument != null) {
         query = query.startAfterDocument(lastDocument);
       }
 
       final snapshot = await query.get();
-      return snapshot.docs.map((doc) => StoryModel.fromSnapshot(doc)).toList();
+      final allStories = snapshot.docs.map((doc) => StoryModel.fromSnapshot(doc)).toList();
+      
+      // If no userId provided, only return public stories (for unauthenticated users)
+      if (userId == null) {
+        return allStories
+            .where((story) => story.visibility == StoryVisibility.public)
+            .take(limit)
+            .toList();
+      }
+      
+      // Filter stories based on what the user can view
+      final visibleStories = allStories
+          .where((story) => story.canUserView(userId))
+          .take(limit)
+          .toList();
+      
+      return visibleStories;
     } catch (e) {
       throw Exception('Failed to get public stories: $e');
     }
@@ -112,6 +135,10 @@ class StoryDatabaseService {
       final user = await UserDatabaseService.getUserById(userId);
       if (user == null || user.friends.isEmpty) return [];
 
+      final stories = <StoryModel>[];
+      final storyIds = <String>{};
+
+      // Only include friends' stories, not the user's own stories
       Query query = _storiesCollection
           .where('uid', whereIn: user.friends)
           .where('expiresAt', isGreaterThan: Timestamp.fromDate(DateTime.now()))
@@ -124,10 +151,19 @@ class StoryDatabaseService {
       }
 
       final snapshot = await query.get();
-      final stories = snapshot.docs.map((doc) => StoryModel.fromSnapshot(doc)).toList();
+      final allStories = snapshot.docs.map((doc) => StoryModel.fromSnapshot(doc)).toList();
       
-      // Filter out stories that user can't view
-      return stories.where((story) => story.canUserView(userId)).toList();
+      // Filter stories that user can view and add to collection (excluding own posts)
+      for (final story in allStories) {
+        if (!storyIds.contains(story.id) && 
+            story.canUserView(userId) && 
+            story.uid != userId) { // Exclude user's own posts
+          stories.add(story);
+          storyIds.add(story.id);
+        }
+      }
+      
+      return stories;
     } catch (e) {
       throw Exception('Failed to get friends stories: $e');
     }
@@ -341,18 +377,16 @@ class StoryDatabaseService {
     try {
       if (query.isEmpty) return [];
       
-      // Search public stories by caption
+      // Search all stories by caption (not just public ones)
       final captionSnapshot = await _storiesCollection
-          .where('visibility', isEqualTo: 'public')
           .where('caption', isGreaterThanOrEqualTo: query)
           .where('caption', isLessThanOrEqualTo: query + '\uf8ff')
           .where('expiresAt', isGreaterThan: Timestamp.fromDate(DateTime.now()))
           .limit(20)
           .get();
 
-      // Search by creator username
+      // Search by creator username (all stories)
       final creatorSnapshot = await _storiesCollection
-          .where('visibility', isEqualTo: 'public')
           .where('creatorUsername', isGreaterThanOrEqualTo: query.toLowerCase())
           .where('creatorUsername', isLessThanOrEqualTo: query.toLowerCase() + '\uf8ff')
           .where('expiresAt', isGreaterThan: Timestamp.fromDate(DateTime.now()))
@@ -362,7 +396,7 @@ class StoryDatabaseService {
       final stories = <StoryModel>[];
       final storyIds = <String>{};
       
-      // Combine results and avoid duplicates
+      // Combine results and avoid duplicates, filter by what user can view
       for (final doc in [...captionSnapshot.docs, ...creatorSnapshot.docs]) {
         final story = StoryModel.fromSnapshot(doc);
         if (!storyIds.contains(story.id) && story.canUserView(userId)) {
@@ -378,17 +412,32 @@ class StoryDatabaseService {
   }
 
   // Listen to public stories stream
-  static Stream<List<StoryModel>> listenToPublicStories({int limit = 20}) {
+  static Stream<List<StoryModel>> listenToPublicStories({String? userId, int limit = 20}) {
     return _storiesCollection
-        .where('visibility', isEqualTo: 'public')
         .where('expiresAt', isGreaterThan: Timestamp.fromDate(DateTime.now()))
         .orderBy('expiresAt')
         .orderBy('createdAt', descending: true)
-        .limit(limit)
+        .limit(limit * 2) // Get more to account for filtering
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => StoryModel.fromSnapshot(doc))
-            .toList());
+        .map((snapshot) {
+          final allStories = snapshot.docs
+              .map((doc) => StoryModel.fromSnapshot(doc))
+              .toList();
+          
+          // If no userId provided, only return public stories (for unauthenticated users)
+          if (userId == null) {
+            return allStories
+                .where((story) => story.visibility == StoryVisibility.public)
+                .take(limit)
+                .toList();
+          }
+          
+          // Filter stories based on what the user can view
+          return allStories
+              .where((story) => story.canUserView(userId))
+              .take(limit)
+              .toList();
+        });
   }
 
   // Listen to friends' stories stream
@@ -397,6 +446,8 @@ class StoryDatabaseService {
       if (!userSnapshot.exists) return <StoryModel>[];
       
       final user = UserModel.fromSnapshot(userSnapshot);
+      
+      // Only include friends' stories, not the user's own stories
       if (user.friends.isEmpty) return <StoryModel>[];
 
       final snapshot = await _storiesCollection
@@ -408,7 +459,8 @@ class StoryDatabaseService {
           .get();
 
       final stories = snapshot.docs.map((doc) => StoryModel.fromSnapshot(doc)).toList();
-      return stories.where((story) => story.canUserView(userId)).toList();
+      // Filter out user's own posts and stories they can't view
+      return stories.where((story) => story.canUserView(userId) && story.uid != userId).toList();
     });
   }
 

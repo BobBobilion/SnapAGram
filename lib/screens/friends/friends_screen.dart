@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
-import '../../models/story_model.dart';
 import '../../models/user_model.dart';
 import 'add_friends_screen.dart';
 import '../chats/chat_conversation_screen.dart';
@@ -13,16 +12,12 @@ class FriendsScreen extends StatefulWidget {
   State<FriendsScreen> createState() => _FriendsScreenState();
 }
 
-class _FriendsScreenState extends State<FriendsScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _FriendsScreenState extends State<FriendsScreen> {
   final ScrollController _scrollController = ScrollController();
   final AppServiceManager _serviceManager = AppServiceManager();
   
-  List<StoryModel> _friendsStories = [];
   List<UserModel> _friends = [];
   List<UserModel> _friendRequests = [];
-  bool _isLoadingStories = false;
   bool _isLoadingFriends = false;
   bool _isLoadingRequests = false;
   bool _showRequests = false;
@@ -30,7 +25,6 @@ class _FriendsScreenState extends State<FriendsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadData();
   }
 
@@ -43,41 +37,23 @@ class _FriendsScreenState extends State<FriendsScreen>
 
   @override
   void dispose() {
-    _tabController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
     await Future.wait([
-      _loadFriendsStories(),
       _loadFriendsList(),
       _loadFriendRequests(),
     ]);
   }
 
-  Future<void> _loadFriendsStories() async {
-    if (_isLoadingStories) return;
-    
-    setState(() => _isLoadingStories = true);
-    
-    try {
-      final stories = await _serviceManager.getFriendsStories();
-      setState(() {
-        _friendsStories = stories;
-        _isLoadingStories = false;
-      });
-    } catch (e) {
-      setState(() => _isLoadingStories = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading friends stories: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+  Future<void> _refreshData() async {
+    // Refresh both friends list and friend requests
+    await Future.wait([
+      _loadFriendsList(),
+      _loadFriendRequests(),
+    ]);
   }
 
   Future<void> _loadFriendsList() async {
@@ -206,17 +182,6 @@ class _FriendsScreenState extends State<FriendsScreen>
         ),
         backgroundColor: Colors.white,
         elevation: 1,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.blue[600],
-          unselectedLabelColor: Colors.grey[600],
-          indicatorColor: Colors.blue[600],
-          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-          tabs: const [
-            Tab(text: 'Stories'),
-            Tab(text: 'Friends'),
-          ],
-        ),
         actions: [
           // Friend Requests Notification Icon
           Stack(
@@ -325,12 +290,70 @@ class _FriendsScreenState extends State<FriendsScreen>
           
           // Main Content
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildFriendsStoriesTab(),
-                _buildFriendsListTab(),
-              ],
+            child: RefreshIndicator(
+              onRefresh: _refreshData,
+              child: _friends.isEmpty
+                  ? SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.6,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.people_outline,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No friends yet',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Pull down to refresh or add friends',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const AddFriendsScreen(),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.person_add),
+                                label: const Text('Add Friends'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue[600],
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: _friends.length,
+                      itemBuilder: (context, index) {
+                        return _buildFriendCard(_friends[index]);
+                      },
+                    ),
             ),
           ),
         ],
@@ -465,313 +488,6 @@ class _FriendsScreenState extends State<FriendsScreen>
     );
   }
 
-  Widget _buildFriendsStoriesTab() {
-    return RefreshIndicator(
-      onRefresh: _loadFriendsStories,
-      child: _isLoadingStories && _friendsStories.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : _friendsStories.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.people_outline,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No friends\' stories yet',
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Your friends haven\'t posted any stories',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _friendsStories.length,
-                  itemBuilder: (context, index) {
-                    return _buildFriendStoryCard(_friendsStories[index]);
-                  },
-                ),
-    );
-  }
-
-  Widget _buildFriendStoryCard(StoryModel story) {
-    final timeAgo = _getTimeAgo(story.createdAt);
-    final isLiked = story.hasUserLiked(_serviceManager.currentUserId ?? '');
-    final isViewed = story.hasUserViewed(_serviceManager.currentUserId ?? '');
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Friend Story Header
-          ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Colors.green[100],
-              backgroundImage: story.creatorProfilePicture != null
-                  ? NetworkImage(story.creatorProfilePicture!)
-                  : null,
-              child: story.creatorProfilePicture == null
-                  ? Text(
-                      story.creatorUsername.isNotEmpty 
-                          ? story.creatorUsername[0].toUpperCase()
-                          : 'F',
-                      style: TextStyle(
-                        color: Colors.green[600],
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null,
-            ),
-            title: Text(
-              story.creatorUsername,
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-            ),
-            subtitle: Text(
-              timeAgo,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-            ),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: story.visibility == StoryVisibility.friends 
-                    ? Colors.blue[100] 
-                    : Colors.green[100],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                story.visibility == StoryVisibility.friends 
-                    ? 'Friends Only' 
-                    : 'Public',
-                style: GoogleFonts.poppins(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: story.visibility == StoryVisibility.friends 
-                      ? Colors.blue[700] 
-                      : Colors.green[700],
-                ),
-              ),
-            ),
-          ),
-          
-          // Friend Story Content
-          GestureDetector(
-            onTap: () => _viewStory(story),
-            child: Container(
-              height: 250,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          story.isEncrypted ? Icons.lock : 
-                          story.type == StoryType.image ? Icons.image : Icons.videocam,
-                          size: 48,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          story.isEncrypted 
-                              ? 'Encrypted Story'
-                              : story.type == StoryType.image 
-                                  ? 'Image Story' 
-                                  : 'Video Story',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        if (story.caption != null && story.caption!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            story.caption!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[500],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  // View indicator
-                  if (isViewed)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Viewed',
-                          style: GoogleFonts.poppins(
-                            fontSize: 10,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Friend Story Actions
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    isLiked ? Icons.favorite : Icons.favorite_border,
-                    color: isLiked ? Colors.red : Colors.grey[600],
-                  ),
-                  onPressed: () => _toggleLike(story),
-                ),
-                Text(
-                  story.likeCount.toString(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                IconButton(
-                  icon: Icon(
-                    Icons.visibility,
-                    color: Colors.grey[600],
-                  ),
-                  onPressed: () => _viewStory(story),
-                ),
-                Text(
-                  story.viewCount.toString(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(
-                    Icons.share,
-                    color: Colors.grey[600],
-                  ),
-                  onPressed: () => _shareStory(story),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFriendsListTab() {
-    return RefreshIndicator(
-      onRefresh: _loadFriendsList,
-      child: _isLoadingFriends && _friends.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : _friends.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.people_outline,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No friends yet',
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Add friends to see their stories here',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const AddFriendsScreen(),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.person_add),
-                        label: const Text('Add Friends'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue[600],
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _friends.length,
-                  itemBuilder: (context, index) {
-                    return _buildFriendCard(_friends[index]);
-                  },
-                ),
-    );
-  }
-
   Widget _buildFriendCard(UserModel friend) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -885,68 +601,9 @@ class _FriendsScreenState extends State<FriendsScreen>
     );
   }
 
-  String _getTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
-
   void _showFriendProfile(UserModel friend) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${friend.displayName}\'s profile coming soon!')),
-    );
-  }
-
-  Future<void> _viewStory(StoryModel story) async {
-    try {
-      await _serviceManager.viewStory(story.id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Story viewed!')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error viewing story: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _toggleLike(StoryModel story) async {
-    try {
-      if (story.hasUserLiked(_serviceManager.currentUserId ?? '')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unlike feature coming soon!')),
-        );
-      } else {
-        await _serviceManager.likeStory(story.id);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Story liked!')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error liking story: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _shareStory(StoryModel story) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Share feature coming soon!')),
     );
   }
 

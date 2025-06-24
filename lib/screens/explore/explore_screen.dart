@@ -11,48 +11,153 @@ class ExploreScreen extends StatefulWidget {
   State<ExploreScreen> createState() => _ExploreScreenState();
 }
 
-class _ExploreScreenState extends State<ExploreScreen> {
+class _ExploreScreenState extends State<ExploreScreen> 
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
-  bool _isLoading = false;
-  List<StoryModel> _stories = [];
+  final ScrollController _friendsScrollController = ScrollController();
+  bool _isLoadingPublic = false;
+  bool _isLoadingFriends = false;
+  List<StoryModel> _publicStories = [];
+  List<StoryModel> _friendsStories = [];
   final AppServiceManager _serviceManager = AppServiceManager();
 
   @override
   void initState() {
     super.initState();
-    _loadStories();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadPublicStories();
+    _loadFriendsStories();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _scrollController.dispose();
+    _friendsScrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadStories() async {
-    if (_isLoading) return;
+  Future<void> _loadPublicStories() async {
+    if (_isLoadingPublic) return;
     
-    setState(() => _isLoading = true);
+    setState(() => _isLoadingPublic = true);
     
     try {
       print('ExploreScreen: Loading public stories...');
       final stories = await _serviceManager.getPublicStories();
-      print('ExploreScreen: Loaded ${stories.length} stories');
+      print('ExploreScreen: Loaded ${stories.length} public stories');
       
       if (mounted) {
         setState(() {
-          _stories = stories;
-          _isLoading = false;
+          _publicStories = stories;
+          _isLoadingPublic = false;
         });
       }
     } catch (e) {
-      print('ExploreScreen: Error loading stories - $e');
+      print('ExploreScreen: Error loading public stories - $e');
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isLoadingPublic = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading stories: $e'),
+            content: Text('Error loading public stories: $e'),
             backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadFriendsStories() async {
+    if (_isLoadingFriends) return;
+    
+    setState(() => _isLoadingFriends = true);
+    
+    try {
+      print('ExploreScreen: Loading friends stories...');
+      final stories = await _serviceManager.getFriendsStories();
+      print('ExploreScreen: Loaded ${stories.length} friends stories');
+      
+      if (mounted) {
+        setState(() {
+          _friendsStories = stories;
+          _isLoadingFriends = false;
+        });
+      }
+    } catch (e) {
+      print('ExploreScreen: Error loading friends stories - $e');
+      if (mounted) {
+        setState(() => _isLoadingFriends = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading friends stories: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _refreshPublicStories() async {
+    try {
+      print('ExploreScreen: Refreshing public stories...');
+      final stories = await _serviceManager.getPublicStories();
+      print('ExploreScreen: Refreshed ${stories.length} public stories');
+      
+      if (mounted) {
+        setState(() {
+          _publicStories = stories;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Refreshed ${stories.length} public stories'),
+            backgroundColor: Colors.green,
+            duration: const Duration(milliseconds: 1500),
+          ),
+        );
+      }
+    } catch (e) {
+      print('ExploreScreen: Error refreshing public stories - $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error refreshing stories: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(milliseconds: 2000),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _refreshFriendsStories() async {
+    try {
+      print('ExploreScreen: Refreshing friends stories...');
+      final stories = await _serviceManager.getFriendsStories();
+      print('ExploreScreen: Refreshed ${stories.length} friends stories');
+      
+      if (mounted) {
+        setState(() {
+          _friendsStories = stories;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Refreshed ${stories.length} friends stories'),
+            backgroundColor: Colors.green,
+            duration: const Duration(milliseconds: 1500),
+          ),
+        );
+      }
+    } catch (e) {
+      print('ExploreScreen: Error refreshing friends stories - $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error refreshing friends stories: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(milliseconds: 2000),
           ),
         );
       }
@@ -73,6 +178,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
         ),
         backgroundColor: Colors.white,
         elevation: 1,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.blue[600],
+          unselectedLabelColor: Colors.grey[600],
+          indicatorColor: Colors.blue[600],
+          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          tabs: const [
+            Tab(text: 'Public'),
+            Tab(text: 'Friends'),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -100,33 +216,75 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadStories,
-        child: _buildStoriesFeed(),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildPublicStoriesTab(),
+          _buildFriendsStoriesTab(),
+        ],
       ),
     );
   }
 
-  Widget _buildStoriesFeed() {
-    if (_isLoading && _stories.isEmpty) {
+  Widget _buildPublicStoriesTab() {
+    return RefreshIndicator(
+      onRefresh: _refreshPublicStories,
+      color: Colors.blue[600],
+      backgroundColor: Colors.white,
+      child: _buildStoriesFeed(
+        stories: _publicStories,
+        isLoading: _isLoadingPublic,
+        scrollController: _scrollController,
+        emptyMessage: 'No public stories yet',
+        emptySubMessage: 'Be the first to share a story!',
+        storyType: 'public',
+      ),
+    );
+  }
+
+  Widget _buildFriendsStoriesTab() {
+    return RefreshIndicator(
+      onRefresh: _refreshFriendsStories,
+      color: Colors.green[600],
+      backgroundColor: Colors.white,
+      child: _buildStoriesFeed(
+        stories: _friendsStories,
+        isLoading: _isLoadingFriends,
+        scrollController: _friendsScrollController,
+        emptyMessage: 'No friends\' stories yet',
+        emptySubMessage: 'Your friends haven\'t posted any stories',
+        storyType: 'friends',
+      ),
+    );
+  }
+
+  Widget _buildStoriesFeed({
+    required List<StoryModel> stories,
+    required bool isLoading,
+    required ScrollController scrollController,
+    required String emptyMessage,
+    required String emptySubMessage,
+    required String storyType,
+  }) {
+    if (isLoading && stories.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(),
       );
     }
 
-    if (_stories.isEmpty) {
+    if (stories.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.photo_library_outlined,
+              storyType == 'friends' ? Icons.people_outline : Icons.photo_library_outlined,
               size: 64,
               color: Colors.grey[400],
             ),
             const SizedBox(height: 16),
             Text(
-              'No stories yet',
+              emptyMessage,
               style: GoogleFonts.poppins(
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
@@ -135,7 +293,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Be the first to share a story!',
+              emptySubMessage,
               style: GoogleFonts.poppins(
                 fontSize: 14,
                 color: Colors.grey[500],
@@ -147,16 +305,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(16),
-      itemCount: _stories.length,
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // Add bottom padding for refresh button
+      itemCount: stories.length + 1, // Add 1 for the refresh button
       itemBuilder: (context, index) {
-        return _buildStoryCard(_stories[index]);
+        if (index == stories.length) {
+          // Show refresh button at the bottom
+          return _buildRefreshButton(storyType);
+        }
+        return _buildStoryCard(stories[index], storyType);
       },
     );
   }
 
-  Widget _buildStoryCard(StoryModel story) {
+  Widget _buildStoryCard(StoryModel story, String storyType) {
     final timeAgo = _getTimeAgo(story.createdAt);
     final isLiked = story.hasUserLiked(_serviceManager.currentUserId ?? '');
     final isViewed = story.hasUserViewed(_serviceManager.currentUserId ?? '');
@@ -173,7 +335,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           // Story Header
           ListTile(
             leading: CircleAvatar(
-              backgroundColor: Colors.blue[100],
+              backgroundColor: storyType == 'friends' ? Colors.green[100] : Colors.blue[100],
               backgroundImage: story.creatorProfilePicture != null
                   ? NetworkImage(story.creatorProfilePicture!)
                   : null,
@@ -183,7 +345,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           ? story.creatorUsername[0].toUpperCase()
                           : 'U',
                       style: TextStyle(
-                        color: Colors.blue[600],
+                        color: storyType == 'friends' ? Colors.green[600] : Colors.blue[600],
                         fontWeight: FontWeight.bold,
                       ),
                     )
@@ -203,10 +365,28 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 color: Colors.grey[600],
               ),
             ),
-            trailing: IconButton(
-              icon: const Icon(Icons.more_vert),
-              onPressed: () => _showStoryOptions(context, story),
-            ),
+            trailing: storyType == 'friends' 
+                ? (story.visibility == StoryVisibility.friends 
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue[100],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Friends Only',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.blue[700],
+                          ),
+                        ),
+                      )
+                    : null)
+                : IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    onPressed: () => _showStoryOptions(context, story),
+                  ),
           ),
           
           // Story Content
@@ -396,14 +576,19 @@ class _ExploreScreenState extends State<ExploreScreen> {
       return;
     }
     
-    // Optimistic UI update - immediately update the local state
+    // Optimistic UI update - immediately update the local state in both lists
     final updatedStory = _updateStoryViewOptimistically(story, currentUserId);
-    final storyIndex = _stories.indexWhere((s) => s.id == story.id);
-    if (storyIndex != -1) {
-      setState(() {
-        _stories[storyIndex] = updatedStory;
-      });
-    }
+    final publicStoryIndex = _publicStories.indexWhere((s) => s.id == story.id);
+    final friendsStoryIndex = _friendsStories.indexWhere((s) => s.id == story.id);
+    
+    setState(() {
+      if (publicStoryIndex != -1) {
+        _publicStories[publicStoryIndex] = updatedStory;
+      }
+      if (friendsStoryIndex != -1) {
+        _friendsStories[friendsStoryIndex] = updatedStory;
+      }
+    });
     
     try {
       // Sync with database in the background
@@ -418,15 +603,19 @@ class _ExploreScreenState extends State<ExploreScreen> {
       );
       
       // Optionally refresh from server to ensure consistency (but don't await it)
-      _loadStories();
+      _loadPublicStories();
+      _loadFriendsStories();
       
     } catch (e) {
-      // Revert the optimistic update on error
-      if (storyIndex != -1) {
-        setState(() {
-          _stories[storyIndex] = story; // Revert to original state
-        });
-      }
+      // Revert the optimistic update on error in both lists
+      setState(() {
+        if (publicStoryIndex != -1) {
+          _publicStories[publicStoryIndex] = story; // Revert to original state
+        }
+        if (friendsStoryIndex != -1) {
+          _friendsStories[friendsStoryIndex] = story; // Revert to original state
+        }
+      });
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -457,29 +646,38 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final currentUserId = _serviceManager.currentUserId ?? '';
     final isCurrentlyLiked = story.hasUserLiked(currentUserId);
     
-    // Optimistic UI update - immediately update the local state
+    // Optimistic UI update - immediately update the local state in both lists
     final updatedStory = _updateStoryLikeOptimistically(story, currentUserId, !isCurrentlyLiked);
-    final storyIndex = _stories.indexWhere((s) => s.id == story.id);
-    if (storyIndex != -1) {
-      setState(() {
-        _stories[storyIndex] = updatedStory;
-      });
-    }
+    final publicStoryIndex = _publicStories.indexWhere((s) => s.id == story.id);
+    final friendsStoryIndex = _friendsStories.indexWhere((s) => s.id == story.id);
+    
+    setState(() {
+      if (publicStoryIndex != -1) {
+        _publicStories[publicStoryIndex] = updatedStory;
+      }
+      if (friendsStoryIndex != -1) {
+        _friendsStories[friendsStoryIndex] = updatedStory;
+      }
+    });
     
     try {
       // Sync with database in the background
       await _serviceManager.likeStory(story.id);
       
       // Optionally refresh from server to ensure consistency (but don't await it)
-      _loadStories();
+      _loadPublicStories();
+      _loadFriendsStories();
       
     } catch (e) {
-      // Revert the optimistic update on error
-      if (storyIndex != -1) {
-        setState(() {
-          _stories[storyIndex] = story; // Revert to original state
-        });
-      }
+      // Revert the optimistic update on error in both lists
+      setState(() {
+        if (publicStoryIndex != -1) {
+          _publicStories[publicStoryIndex] = story; // Revert to original state
+        }
+        if (friendsStoryIndex != -1) {
+          _friendsStories[friendsStoryIndex] = story; // Revert to original state
+        }
+      });
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -514,6 +712,104 @@ class _ExploreScreenState extends State<ExploreScreen> {
   void _shareStory(StoryModel story) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Share feature coming soon!')),
+    );
+  }
+
+  Widget _buildRefreshButton(String storyType) {
+    final isPublic = storyType == 'public';
+    final isLoading = isPublic ? _isLoadingPublic : _isLoadingFriends;
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 20, horizontal: 32),
+      child: Column(
+        children: [
+          // Divider
+          Container(
+            height: 1,
+            color: Colors.grey[300],
+            margin: const EdgeInsets.only(bottom: 20),
+          ),
+          
+          // Refresh Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isLoading 
+                  ? null 
+                  : () {
+                      if (isPublic) {
+                        _refreshPublicStories();
+                      } else {
+                        _refreshFriendsStories();
+                      }
+                    },
+              icon: isLoading
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.grey[400]!,
+                        ),
+                      ),
+                    )
+                  : Icon(
+                      Icons.refresh,
+                      color: isPublic ? Colors.blue[600] : Colors.green[600],
+                    ),
+              label: Text(
+                isLoading 
+                    ? 'Refreshing...' 
+                    : 'Refresh ${isPublic ? "Public" : "Friends"} Stories',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isLoading 
+                      ? Colors.grey[500] 
+                      : (isPublic ? Colors.blue[600] : Colors.green[600]),
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: isPublic ? Colors.blue[600] : Colors.green[600],
+                elevation: 2,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: isPublic ? Colors.blue[300]! : Colors.green[300]!,
+                    width: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // Bottom message
+          Text(
+            'You\'ve reached the end!',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.grey[500],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          
+          const SizedBox(height: 8),
+          
+          Text(
+            'Pull down or tap refresh to see new stories',
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: Colors.grey[400],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 

@@ -656,12 +656,7 @@ class _AccountScreenState extends State<AccountScreen> {
               onPressed: () async {
                 Navigator.of(context).pop();
                 await context.read<AuthService>().signOut();
-                if (context.mounted) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (context) => const LoginScreen()),
-                    (route) => false,
-                  );
-                }
+                // Let AuthWrapper handle the navigation automatically
               },
               child: Text(
                 'Sign Out',

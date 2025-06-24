@@ -19,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   late List<Widget> _screens;
+  late PageController _pageController;
 
   // Define the accent blue color from PRD
   static const Color accentBlue = Color(0xFF2196F3);
@@ -26,27 +27,63 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _screens = [
       const ExploreScreen(),
-      const FriendsScreen(),
-      const PlaceholderScreen(), // Post screen will be handled by FAB
+      const FriendsScreen(), 
       const ChatsScreen(),
       AccountScreen(onNavigateToTab: _navigateToTab),
     ];
   }
 
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   void _navigateToTab(int index) {
+    // Handle camera button differently since it's not a page
+    if (index == 2) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const CameraScreen(),
+        ),
+      );
+      return;
+    }
+    
+    // Convert bottom nav index to page index (skipping camera)
+    int pageIndex = index;
+    if (index > 2) pageIndex = index - 1; // Account tab becomes page 3
+    
     setState(() {
       _currentIndex = index;
     });
+    _pageController.animateToPage(
+      pageIndex,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      body: IndexedStack(
-        index: _currentIndex,
+      body: PageView(
+        controller: _pageController,
+        physics: const BouncingScrollPhysics(), // Better swipe feel
+        onPageChanged: (index) {
+          // Convert page index back to bottom nav index (accounting for camera)
+          int bottomNavIndex = index;
+          if (index >= 2) bottomNavIndex = index + 1; // Skip camera index
+          
+          setState(() {
+            _currentIndex = bottomNavIndex;
+          });
+        },
         children: _screens,
       ),
       bottomNavigationBar: Container(
@@ -102,15 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCameraButton() {
     return GestureDetector(
-      onTap: () {
-        // Navigate to camera screen
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const CameraScreen(),
-          ),
-        );
-      },
+      onTap: () => _navigateToTab(2), // Use the centralized navigation
       child: Container(
         height: 60,
         width: 60,

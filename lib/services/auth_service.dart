@@ -100,6 +100,9 @@ class AuthService extends ChangeNotifier {
   // Sign in with Google
   Future<UserCredential?> signInWithGoogle() async {
     try {
+      // Sign out from Google first to clear cached account and force account selection
+      await _googleSignIn.signOut();
+      
       // Trigger the authentication flow
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       
@@ -173,6 +176,25 @@ class AuthService extends ChangeNotifier {
       _userModel = null;
     } catch (e) {
       throw Exception('Failed to sign out: $e');
+    }
+  }
+
+  // Sign out with complete Google disconnect (removes all cached Google credentials)
+  Future<void> signOutWithGoogleDisconnect() async {
+    try {
+      // Update offline status before signing out
+      if (_userModel != null) {
+        await UserDatabaseService.updateOnlineStatus(_userModel!.uid, false);
+      }
+      
+      await Future.wait([
+        _auth.signOut(),
+        _googleSignIn.disconnect(), // This completely removes the account from cache
+      ]);
+      
+      _userModel = null;
+    } catch (e) {
+      throw Exception('Failed to sign out with Google disconnect: $e');
     }
   }
 

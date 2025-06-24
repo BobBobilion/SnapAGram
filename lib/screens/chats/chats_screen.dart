@@ -123,47 +123,54 @@ class _ChatsScreenState extends State<ChatsScreen> {
               child: _isLoading && _chats.isEmpty
                   ? const Center(child: CircularProgressIndicator())
                   : _chats.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.chat_bubble_outline,
-                                size: 64,
-                                color: Colors.grey[400],
+                      ? SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.6,
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.chat_bubble_outline,
+                                    size: 64,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No chats yet',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Pull down to refresh or start a chat',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      color: Colors.grey[500],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton.icon(
+                                    onPressed: () => _showCreateGroupDialog(context),
+                                    icon: const Icon(Icons.group_add),
+                                    label: const Text('Start Chat'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue[600],
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No chats yet',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Start a conversation with friends',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                onPressed: () => _showCreateGroupDialog(context),
-                                icon: const Icon(Icons.group_add),
-                                label: const Text('Start Chat'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue[600],
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
+                          physics: const AlwaysScrollableScrollPhysics(),
                           itemCount: _chats.length,
                           itemBuilder: (context, index) {
                             return _buildChatItem(_chats[index]);

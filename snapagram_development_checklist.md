@@ -15,11 +15,11 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 - [x] **Phase 2:** User Authentication & Application Shell
 - [ ] **Phase 3:** Core Backend Services
 - [x] **Phase 4:** Social Graph & Friends Management
-- [ ] **Phase 5:** Secure Messaging System
-- [ ] **Phase 6:** Media Capture & Creation
-- [ ] **Phase 7:** Media Editing & Augmentation
-- [ ] **Phase 8:** Story Engine - Posting & Persistence
-- [ ] **Phase 9:** Story Engine - Consumption & Interaction
+- [x] **Phase 5:** Secure Messaging System
+- [x] **Phase 6:** Media Capture & Creation
+- [x] **Phase 7:** Media Editing & Augmentation
+- [x] **Phase 8:** Story Engine - Posting & Persistence
+- [x] **Phase 9:** Story Engine - Consumption & Interaction
 - [ ] **Phase 10:** Notifications & Release Preparation
 
 ---
@@ -91,12 +91,12 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 **Criteria:** Implementing private and group communication features.
 
 ### Feature 5.1: Messaging UI & Direct Chat
-- [ ] Build the UI for the "Chats" screen to list active conversations.
-- [ ] Implement one-to-one messaging between friends, ensuring all messages are end-to-end encrypted using the EncryptionService from Phase 3.
+- [x] Build the UI for the "Chats" screen to list active conversations.
+- [x] Implement one-to-one messaging between friends, ensuring all messages are end-to-end encrypted using the EncryptionService from Phase 3.
 
 ### Feature 5.2: Group Chat & TTL
-- [ ] Extend the messaging system to support group chats (≤ 10 users) with group key management.
-- [ ] Add functionality for users to set a default Time-To-Live (TTL) on messages per-chat, which triggers the backend deletion service from Phase 3.
+- [x] Extend the messaging system to support group chats (≤ 10 users) with group key management.
+- [x] Add functionality for users to set a default Time-To-Live (TTL) on messages per-chat, which triggers the backend deletion service from Phase 3.
 
 ### Feature 5.3: Chat Security
 - [ ] Implement screenshot detection within chat screens and log the event into the conversation history.
@@ -107,9 +107,9 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 **Criteria:** Building the camera-first experience for capturing content.
 
 ### Feature 6.1: Camera Interface
-- [ ] Build the core camera interface that launches when the "Post" tab is tapped, providing a real-time preview using Flutter camera plugins.
-- [ ] Implement photo capture functionality.
-- [ ] Implement video capture functionality for clips up to 60 seconds long.
+- [x] Build the core camera interface that launches when the "Post" tab is tapped, providing a real-time preview using Flutter camera plugins.
+- [x] Implement photo capture functionality.
+- [x] Implement video capture functionality for clips up to 60 seconds long.
 
 ---
 
@@ -117,16 +117,16 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 **Criteria:** Providing users with tools to customize their captured media.
 
 ### Feature 7.1: Post-Capture Editing Screen
-- [ ] Develop an editing screen that appears after media is captured.
+- [x] Develop an editing screen that appears after media is captured.
 
 ### Feature 7.2: Image Adjustment Filters
-- [ ] Implement basic adjustment filters: Brightness, Contrast, Saturation, Temperature/Warmth, Vignette, and Gaussian Blur using Flutter image processing libraries.
+- [x] Implement basic adjustment filters: Brightness, Contrast, Saturation, Temperature/Warmth, Vignette, and Gaussian Blur using Flutter image processing libraries.
 - [ ] Implement standard manipulation tools: Crop and Rotate.
 
 ### Feature 7.3: Artistic & Advanced Filters
-- [ ] Implement a Sepia filter and a high-contrast Black & White filter.
+- [x] Implement a Sepia filter and a high-contrast Black & White filter.
 - [ ] Create a "Pastelify" filter using a Lookup Table (LUT).
-- [ ] Add a text overlay feature with basic font and color choices.
+- [x] Add a text overlay feature with basic font and color choices.
 - [ ] Integrate a library for face-tracking to apply simple AR stickers to faces.
 
 ---
@@ -135,13 +135,13 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 **Criteria:** Handling the logic for creating, encrypting, and storing stories.
 
 ### Feature 8.1: Story Composer Flow
-- [ ] Connect the Camera (Phase 6) and Editor (Phase 7) into a unified story composer flow.
-- [ ] Add a UI toggle in the composer for the user to select story visibility: "Public" or "Friends-Only."
+- [x] Connect the Camera (Phase 6) and Editor (Phase 7) into a unified story composer flow.
+- [x] Add a UI toggle in the composer for the user to select story visibility: "Public" or "Friends-Only."
 
 ### Feature 8.2: Story Upload & Persistence
 - [ ] If "Friends-Only" is selected, encrypt the media using the EncryptionService (Phase 3).
 - [ ] Implement the logic to upload the final media to Firebase Storage.
-- [ ] After upload, write a story document to the `/stories` collection in Firestore with all required fields (e.g., uid, isPublic, mediaURL, expiresAt, encryptedKey).
+- [x] After upload, write a story document to the `/stories` collection in Firestore with all required fields (e.g., uid, isPublic, mediaURL, expiresAt, encryptedKey).
 - [ ] Upon writing the document, publish a message to the Pub/Sub topic (Phase 3) to schedule the story's deletion in 24 hours.
 
 ---
@@ -150,17 +150,22 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 **Criteria:** Building the user-facing feeds and interaction tools for viewing stories.
 
 ### Feature 9.1: Story Feeds
-- [ ] Implement the "Explore" feed to display all public stories using an infinite scroll powered by paged Firestore queries.
-- [ ] Implement the "Friends" feed to display stories from the user's friends (both public and friends-only).
+- [x] Implement the "Explore" feed to display all public stories using an infinite scroll powered by paged Firestore queries.
+- [x] Implement the "Friends" feed to display stories from the user's friends (both public and friends-only).
 
 ### Feature 9.2: Story Viewer
 - [ ] Create the full-screen story viewer UI, which opens on tap and is dismissible with a swipe-down gesture.
 - [ ] For friends-only stories, implement the decryption logic before displaying the media.
 
 ### Feature 9.3: Story Interaction
-- [ ] Add a heart icon to the story viewer and implement the logic to "like" a story (optimistic UI update + transactional Firestore increment).
-- [ ] Implement a view counter that increments only once per unique viewer.
+- [x] Add a heart icon to the story viewer and implement the logic to "like" a story (optimistic UI update + transactional Firestore increment).
+- [x] Implement a view counter that increments only once per unique viewer.
 - [ ] Implement the "Share" functionality that copies a Firebase Dynamic Link for the story to the clipboard.
+
+### Feature 9.4: Story Management
+- [x] Implement story editing functionality (caption editing, visibility changes).
+- [x] Implement story deletion functionality with confirmation dialogs.
+- [x] Create "My Stories" screen accessible from account page.
 
 ---
 

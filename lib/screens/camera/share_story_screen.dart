@@ -22,6 +22,7 @@ class _ShareStoryScreenState extends State<ShareStoryScreen> {
   
   String _selectedVisibility = 'public'; // 'public' or 'friends'
   bool _isPosting = false;
+  String _uploadStatus = '';
 
   @override
   void dispose() {
@@ -30,28 +31,28 @@ class _ShareStoryScreenState extends State<ShareStoryScreen> {
   }
 
   Future<void> _postStory() async {
-    setState(() => _isPosting = true);
+    setState(() {
+      _isPosting = true;
+      _uploadStatus = 'Preparing...';
+    });
 
     try {
       final isPublic = _selectedVisibility == 'public';
       final caption = _captionController.text.trim();
       
-      // Use the actual image file path instead of placeholder
-      // Note: In production, you would upload to Firebase Storage and use that URL
-      final actualImagePath = widget.imagePath;
+      setState(() => _uploadStatus = 'Uploading image...');
       
-      // Create the story using the service manager
+      // Create the story using the service manager - it will handle Firebase Storage upload
       final storyId = await AppServiceManager().createStory(
         type: StoryType.image,
         visibility: isPublic ? StoryVisibility.public : StoryVisibility.friends,
-        mediaUrl: actualImagePath, // Use the actual file path
+        mediaUrl: widget.imagePath, // Local file path - will be uploaded automatically
         caption: caption.isNotEmpty ? caption : null,
       );
       
-      print('Story created with ID: $storyId');
+      setState(() => _uploadStatus = 'Creating story...');
       
-      // Note: We're not deleting the file immediately so it can be displayed in the feed
-      // In production, you would upload to Firebase Storage and then delete the local file
+      print('Story created with ID: $storyId');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -67,7 +68,10 @@ class _ShareStoryScreenState extends State<ShareStoryScreen> {
         Navigator.popUntil(context, (route) => route.isFirst);
       }
     } catch (e) {
-      setState(() => _isPosting = false);
+      setState(() {
+        _isPosting = false;
+        _uploadStatus = '';
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -286,7 +290,7 @@ class _ShareStoryScreenState extends State<ShareStoryScreen> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          'Posting...',
+                          _uploadStatus.isEmpty ? 'Posting...' : _uploadStatus,
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../models/story_model.dart';
@@ -7,6 +8,7 @@ import 'auth_service.dart';
 import 'user_database_service.dart';
 import 'story_database_service.dart';
 import 'chat_database_service.dart';
+import 'storage_service.dart';
 
 /// Centralized service manager for the SnapAGram app
 /// Provides easy access to all backend services and manages app-wide operations
@@ -132,11 +134,39 @@ class AppServiceManager extends ChangeNotifier {
   }) async {
     if (currentUserId == null) throw Exception('User not authenticated');
     
+    String finalMediaUrl = mediaUrl;
+    
+    // If mediaUrl is a local file path, upload it to Firebase Storage first
+    if (!mediaUrl.startsWith('http')) {
+      try {
+        print('AppServiceManager: Uploading local image to Firebase Storage...');
+        final File imageFile = File(mediaUrl);
+        
+        if (await imageFile.exists()) {
+          finalMediaUrl = await StorageService.uploadStoryImage(imageFile, currentUserId!);
+          print('AppServiceManager: Image uploaded successfully - $finalMediaUrl');
+          
+          // Clean up local file after successful upload
+          try {
+            await imageFile.delete();
+            print('AppServiceManager: Local image file deleted');
+          } catch (e) {
+            print('AppServiceManager: Warning - Could not delete local file: $e');
+          }
+        } else {
+          throw Exception('Local image file does not exist: $mediaUrl');
+        }
+      } catch (e) {
+        print('AppServiceManager: Failed to upload image - $e');
+        throw Exception('Failed to upload image: $e');
+      }
+    }
+    
     return await StoryDatabaseService.createStory(
       uid: currentUserId!,
       type: type,
       visibility: visibility,
-      mediaUrl: mediaUrl,
+      mediaUrl: finalMediaUrl,
       thumbnailUrl: thumbnailUrl,
       caption: caption,
       filters: filters,
@@ -145,9 +175,57 @@ class AppServiceManager extends ChangeNotifier {
       allowedViewers: allowedViewers,
     );
   }
+  
+  /// Create story directly from file (convenience method)
+  Future<String> createStoryFromFile({
+    required File imageFile,
+    required StoryType type,
+    required StoryVisibility visibility,
+    String? caption,
+    Map<String, dynamic> filters = const {},
+    bool isEncrypted = false,
+    String? encryptedKey,
+    List<String> allowedViewers = const [],
+  }) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    
+    try {
+      print('AppServiceManager: Creating story from file...');
+      
+      // Upload image to Firebase Storage
+      final String mediaUrl = await StorageService.uploadStoryImage(imageFile, currentUserId!);
+      print('AppServiceManager: Image uploaded successfully - $mediaUrl');
+      
+      // Create story with the uploaded URL
+      final String storyId = await StoryDatabaseService.createStory(
+        uid: currentUserId!,
+        type: type,
+        visibility: visibility,
+        mediaUrl: mediaUrl,
+        caption: caption,
+        filters: filters,
+        isEncrypted: isEncrypted,
+        encryptedKey: encryptedKey,
+        allowedViewers: allowedViewers,
+      );
+      
+      // Clean up local file after successful story creation
+      try {
+        await imageFile.delete();
+        print('AppServiceManager: Local image file deleted');
+      } catch (e) {
+        print('AppServiceManager: Warning - Could not delete local file: $e');
+      }
+      
+      return storyId;
+    } catch (e) {
+      print('AppServiceManager: Failed to create story from file - $e');
+      throw Exception('Failed to create story: $e');
+    }
+  }
 
   Future<List<StoryModel>> getPublicStories({int limit = 20}) async {
-    return await StoryDatabaseService.getPublicStories(limit: limit);
+    return await StoryDatabaseService.getPublicStories(userId: currentUserId, limit: limit);
   }
 
   Future<List<StoryModel>> getFriendsStories({int limit = 20}) async {
@@ -186,7 +264,28 @@ class AppServiceManager extends ChangeNotifier {
 
   Future<void> deleteStory(String storyId) async {
     if (currentUserId == null) throw Exception('User not authenticated');
-    await StoryDatabaseService.deleteStory(storyId, currentUserId!);
+    
+    try {
+      // Get the story first to obtain the media URL
+      final story = await StoryDatabaseService.getStoryById(storyId);
+      
+      // Delete from database first
+      await StoryDatabaseService.deleteStory(storyId, currentUserId!);
+      
+      // Then delete the image from Firebase Storage if it exists
+      if (story != null && story.mediaUrl.startsWith('http')) {
+        try {
+          await StorageService.deleteFile(story.mediaUrl);
+          print('AppServiceManager: Story image deleted from storage');
+        } catch (e) {
+          print('AppServiceManager: Warning - Could not delete image from storage: $e');
+          // Don't fail the whole operation if storage deletion fails
+        }
+      }
+    } catch (e) {
+      print('AppServiceManager: Failed to delete story - $e');
+      throw Exception('Failed to delete story: $e');
+    }
   }
 
   Future<List<StoryModel>> searchStories(String query) async {
