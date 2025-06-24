@@ -116,7 +116,7 @@ graph TD
 
 | Milestone | Goal | Deliverables |
 |-----------|------|--------------|
-| **M0** | Environment ready | Repo, Firebase, CI |
+| **M0** | Environment ready | Repo, Firebase |
 | **M1** | Auth + Camera | F1, F2 |
 | **M2** | Private Messaging | F4, F6, F7 |
 | **M3** | Group chat | Extend to ≤ 10 |

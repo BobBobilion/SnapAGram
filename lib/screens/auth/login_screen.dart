@@ -49,8 +49,8 @@ class _LoginScreenState extends State<LoginScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Successfully signed in!'),
-              backgroundColor: Colors.green[600],
+              content: Text('Login successful!'),
+              duration: const Duration(milliseconds: 500),
             ),
           );
           
@@ -65,8 +65,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
+            content: Text('Invalid email or password.'),
+            duration: const Duration(milliseconds: 500),
           ),
         );
       }

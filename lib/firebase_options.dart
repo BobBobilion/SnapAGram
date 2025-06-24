@@ -51,7 +51,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '418723985397',
     projectId: 'snapagram-ac74f',
     storageBucket: 'snapagram-ac74f.firebasestorage.app',
-    iosBundleId: 'com.example.snapagram',
+    iosBundleId: 'com.snapagram.app',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -60,7 +60,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '418723985397',
     projectId: 'snapagram-ac74f',
     storageBucket: 'snapagram-ac74f.firebasestorage.app',
-    iosBundleId: 'com.example.snapagram',
+    iosBundleId: 'com.snapagram.app',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

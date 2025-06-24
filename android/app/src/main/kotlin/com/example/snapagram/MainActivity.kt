@@ -1,4 +1,4 @@
-package com.example.snapagram
+package com.snapagram.app
 
 import io.flutter.embedding.android.FlutterActivity
 

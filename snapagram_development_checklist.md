@@ -11,8 +11,8 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 ---
 
 ## Phases Overview
-- [ ] **Phase 1:** Environment & Project Foundation
-- [ ] **Phase 2:** User Authentication & Application Shell
+- [x] **Phase 1:** Environment & Project Foundation
+- [x] **Phase 2:** User Authentication & Application Shell
 - [ ] **Phase 3:** Core Backend Services
 - [ ] **Phase 4:** Social Graph & Friends Management
 - [ ] **Phase 5:** Secure Messaging System
@@ -27,13 +27,12 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 # Phase 1: Environment & Project Foundation (M0)
 **Criteria:** Non-negotiable infrastructure and security setup. This phase ensures a stable and secure environment before any feature code is written.
 
-### Feature 1.1: Version Control & CI
-- [ ] Initialize and configure the Git repository.
-- [ ] Establish a basic Continuous Integration (CI) pipeline to automate builds and unit tests for the Flutter application.
+### Feature 1.1: Version Control
+- [x] Initialize and configure the Git repository.
 
 ### Feature 1.2: Firebase Project Setup
-- [ ] Create and configure the Firebase project.
-- [ ] Enable and configure Firestore, Firebase Storage, Firebase Authentication, and Pub/Sub services.
+- [x] Create and configure the Firebase project.
+- [x] Enable and configure Firestore, Firebase Storage, Firebase Authentication, and Pub/Sub services.
 
 ### Feature 1.3: Project Security
 - [ ] Integrate and enforce Firebase App Check to protect backend resources.
@@ -46,15 +45,15 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 **Criteria:** Enabling users to securely enter the app and see the basic structure.
 
 ### Feature 2.1: Authentication (F1)
-- [ ] Implement the user sign-up and sign-in flow using Firebase's email and password method.
-- [ ] Integrate Google Sign-In as an alternative authentication method.
-- [ ] Upon successful registration, create a corresponding user profile document in Firestore.
+- [x] Implement the user sign-up and sign-in flow using Firebase's email and password method.
+- [x] Integrate Google Sign-In as an alternative authentication method.
+- [x] Upon successful registration, create a corresponding user profile document in Firestore.
 
 ### Feature 2.2: Application Shell & Navigation (Core Screens)
-- [ ] Create the main application layout containing a bottom navigation bar using Flutter's `BottomNavigationBar` widget.
-- [ ] Implement five tab items: "Explore," "Friends," "Post," "Chats," and "Account," each navigating to a placeholder screen using Flutter's Navigator or GoRouter.
-- [ ] Style the central "Post" button as a raised, oversized Floating Action Button (FAB) per PRD specifications.
-- [ ] Build the basic "Account" screen UI where users can view their profile info and sign out.
+- [x] Create the main application layout containing a bottom navigation bar using Flutter's `BottomNavigationBar` widget.
+- [x] Implement five tab items: "Explore," "Friends," "Post," "Chats," and "Account," each navigating to a placeholder screen using Flutter's Navigator or GoRouter.
+- [x] Style the central "Post" button as a raised, oversized Floating Action Button (FAB) per PRD specifications.
+- [x] Build the basic "Account" screen UI where users can view their profile info and sign out.
 
 ### Feature 2.3: User Data Compliance
 - [ ] Implement a user-facing interface or backend endpoint for GDPR-compliant data export and account deletion requests.
