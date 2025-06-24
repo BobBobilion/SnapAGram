@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
@@ -31,18 +32,93 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   UserModel? _otherUser; // Store the other user's data
   bool _isLoading = false;
   bool _isSending = false;
+  Timer? _messageTimer;
 
   @override
   void initState() {
     super.initState();
     _loadChatAndMessages();
+    _startMessageTimer();
   }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _messageTimer?.cancel();
     super.dispose();
+  }
+
+  void _startMessageTimer() {
+    _messageTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _updateMessageTimers();
+    });
+  }
+
+  void _updateMessageTimers() {
+    final now = DateTime.now();
+    final expiredMessages = <MessageModel>[];
+    
+    for (final message in _messages) {
+      final timeElapsed = now.difference(message.createdAt).inSeconds;
+      if (timeElapsed >= 30) {
+        expiredMessages.add(message);
+      }
+    }
+    
+    if (expiredMessages.isNotEmpty) {
+      // Delete expired messages from server
+      _deleteExpiredMessagesFromServer(expiredMessages);
+      
+      // Remove from local list immediately
+      setState(() {
+        _messages.removeWhere((message) => expiredMessages.contains(message));
+      });
+    } else if (mounted) {
+      // Force rebuild to update countdown timers
+      setState(() {});
+    }
+  }
+
+  Future<void> _deleteExpiredMessagesFromServer(List<MessageModel> expiredMessages) async {
+    for (final message in expiredMessages) {
+      try {
+        // Delete message from server (for everyone)
+        await _serviceManager.deleteMessage(message.id, forEveryone: true);
+        print('ChatConversationScreen: Deleted expired message ${message.id} from server');
+      } catch (e) {
+        print('ChatConversationScreen: Failed to delete expired message ${message.id}: $e');
+        // Continue with other messages even if one fails
+      }
+    }
+  }
+
+  List<MessageModel> _filterExpiredMessages(List<MessageModel> messages) {
+    final now = DateTime.now();
+    final validMessages = <MessageModel>[];
+    final expiredMessages = <MessageModel>[];
+    
+    for (final message in messages) {
+      final timeElapsed = now.difference(message.createdAt).inSeconds;
+      if (timeElapsed >= 30) {
+        expiredMessages.add(message);
+      } else {
+        validMessages.add(message);
+      }
+    }
+    
+    // Delete any expired messages found during reload
+    if (expiredMessages.isNotEmpty) {
+      _deleteExpiredMessagesFromServer(expiredMessages);
+    }
+    
+    return validMessages;
+  }
+
+  int _getMessageTimeLeft(MessageModel message) {
+    final now = DateTime.now();
+    final timeElapsed = now.difference(message.createdAt).inSeconds;
+    return 30 - timeElapsed;
   }
 
   Future<void> _loadChatAndMessages() async {
@@ -66,10 +142,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         }
       }
 
-      // Load messages
+      // Load messages and filter out expired ones
       final messages = await _serviceManager.getChatMessages(widget.chatId);
+      final filteredMessages = _filterExpiredMessages(messages);
       setState(() {
-        _messages = messages;
+        _messages = filteredMessages;
         _isLoading = false;
       });
 
@@ -98,14 +175,31 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _messageController.clear();
 
     try {
-      await _serviceManager.sendMessage(
+      final messageId = await _serviceManager.sendMessage(
         chatId: widget.chatId,
         type: MessageType.text,
         content: message,
       );
       
-      // Reload messages to show the new message
-      await _loadChatAndMessages();
+      // Create a local message object and add it to the list
+      // This avoids reloading all messages which could bring back expired ones
+      final currentUser = _serviceManager.currentUser;
+      if (currentUser != null) {
+        final newMessage = MessageModel(
+          id: messageId,
+          chatId: widget.chatId,
+          senderId: currentUser.uid,
+          senderUsername: currentUser.handle,
+          senderProfilePicture: currentUser.profilePictureUrl,
+          type: MessageType.text,
+          content: message,
+          createdAt: DateTime.now(),
+        );
+        
+        setState(() {
+          _messages.insert(0, newMessage); // Insert at the beginning (reverse order)
+        });
+      }
       
       // Scroll to bottom
       if (_scrollController.hasClients) {
@@ -412,6 +506,41 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                               : Colors.white.withOpacity(0.5),
                         ),
                       ],
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 2),
+                  
+                  // Countdown timer
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _getMessageTimeLeft(message) <= 5 
+                            ? Icons.warning_amber 
+                            : Icons.timer,
+                        size: 10,
+                        color: _getMessageTimeLeft(message) <= 5
+                            ? Colors.red.withOpacity(0.7)
+                            : isCurrentUser 
+                                ? Colors.white.withOpacity(0.5) 
+                                : Colors.grey[400],
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        _getMessageTimeLeft(message) <= 0 
+                            ? 'Deleting...'
+                            : 'Disappears in ${_getMessageTimeLeft(message)}s',
+                        style: GoogleFonts.poppins(
+                          fontSize: 9,
+                          color: _getMessageTimeLeft(message) <= 5
+                              ? Colors.red.withOpacity(0.7)
+                              : isCurrentUser 
+                                  ? Colors.white.withOpacity(0.5) 
+                                  : Colors.grey[400],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                     ],
                   ),
                 ],
