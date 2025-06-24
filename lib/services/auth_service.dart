@@ -4,9 +4,7 @@ import 'package:flutter/foundation.dart';
 
 class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId: '418723985397-1si2447upihbqli6i431ltlh77k1opa0.apps.googleusercontent.com',
-  );
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
   User? _user;
 
   User? get user => _user;
@@ -72,10 +70,18 @@ class AuthService extends ChangeNotifier {
       UserCredential result = await _auth.signInWithCredential(credential);
       return result;
     } on FirebaseAuthException catch (e) {
+      print('FirebaseAuthException in Google Sign-In: ${e.code} - ${e.message}');
       throw _handleAuthException(e);
     } catch (e) {
+      print('Exception in Google Sign-In: $e');
       if (e.toString().contains('cancelled')) {
         throw Exception('Sign-in was cancelled');
+      }
+      if (e.toString().contains('network')) {
+        throw Exception('Network error. Please check your internet connection.');
+      }
+      if (e.toString().contains('sign_in_failed')) {
+        throw Exception('Google Sign-In failed. Please check your Google account settings and try again.');
       }
       throw Exception('Google Sign-In failed: $e');
     }

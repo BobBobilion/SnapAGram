@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
+import '../home/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -52,6 +53,12 @@ class _LoginScreenState extends State<LoginScreen> {
               backgroundColor: Colors.green[600],
             ),
           );
+          
+          // Force navigation to home screen
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            (route) => false,
+          );
         }
       }
     } catch (e) {
@@ -85,6 +92,12 @@ class _LoginScreenState extends State<LoginScreen> {
               content: const Text('Successfully signed in with Google!'),
               backgroundColor: Colors.green[600],
             ),
+          );
+          
+          // Force navigation to home screen
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            (route) => false,
           );
         }
       }
