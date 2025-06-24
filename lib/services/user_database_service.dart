@@ -530,6 +530,46 @@ class UserDatabaseService {
     }
   }
 
+  // Fix friends count by recalculating from friends array
+  static Future<void> fixFriendsCount(String userId) async {
+    try {
+      final user = await getUserById(userId);
+      if (user == null) return;
+      
+      final actualFriendsCount = user.friends.length;
+      
+      if (actualFriendsCount != user.friendsCount) {
+        await _usersCollection.doc(userId).update({
+          'friendsCount': actualFriendsCount,
+        });
+        print('Fixed friends count for user $userId: was ${user.friendsCount}, now $actualFriendsCount');
+      }
+    } catch (e) {
+      throw Exception('Failed to fix friends count: $e');
+    }
+  }
+
+  // Fix friends count for all users (admin function)
+  static Future<void> fixAllFriendsCounts() async {
+    try {
+      final usersSnapshot = await _usersCollection.get();
+      
+      for (final doc in usersSnapshot.docs) {
+        final user = UserModel.fromSnapshot(doc);
+        final actualFriendsCount = user.friends.length;
+        
+        if (actualFriendsCount != user.friendsCount) {
+          await _usersCollection.doc(user.uid).update({
+            'friendsCount': actualFriendsCount,
+          });
+          print('Fixed friends count for user ${user.uid}: was ${user.friendsCount}, now $actualFriendsCount');
+        }
+      }
+    } catch (e) {
+      throw Exception('Failed to fix all friends counts: $e');
+    }
+  }
+
   // Migrate existing user to have a handle (for backward compatibility)
   static Future<void> migrateUserToHandle(String userId) async {
     try {

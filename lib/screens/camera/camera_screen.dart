@@ -1,5 +1,12 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:camera/camera.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:image/image.dart' as img;
+import 'photo_editor_screen.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -8,34 +15,221 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _flashAnimationController;
-  late AnimationController _modeAnimationController;
+class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver {
+  CameraController? _cameraController;
+  List<CameraDescription> _cameras = [];
+  bool _isInitialized = false;
   bool _isFlashOn = false;
   bool _isFrontCamera = false;
   bool _isRecording = false;
   String _captureMode = 'photo'; // 'photo' or 'video'
   int _recordingDuration = 0;
+  bool _showGrid = false;
+  bool _permissionGranted = false;
 
   @override
   void initState() {
     super.initState();
-    _flashAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
-    _modeAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
+    WidgetsBinding.instance.addObserver(this);
+    _initializeCamera();
   }
 
   @override
   void dispose() {
-    _flashAnimationController.dispose();
-    _modeAnimationController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _cameraController?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final CameraController? cameraController = _cameraController;
+
+    if (cameraController == null || !cameraController.value.isInitialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive) {
+      cameraController.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initializeCamera();
+    }
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      // Request camera permission
+      final cameraPermission = await Permission.camera.request();
+      final micPermission = await Permission.microphone.request();
+      
+      if (cameraPermission != PermissionStatus.granted) {
+        setState(() => _permissionGranted = false);
+        return;
+      }
+
+      setState(() => _permissionGranted = true);
+
+      // Get available cameras
+      _cameras = await availableCameras();
+      if (_cameras.isEmpty) return;
+
+      // Initialize camera controller
+      _cameraController = CameraController(
+        _cameras[_isFrontCamera ? 1 : 0],
+        ResolutionPreset.high,
+        enableAudio: true,
+      );
+
+      await _cameraController!.initialize();
+      
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
+    } catch (e) {
+      debugPrint('Camera initialization error: $e');
+    }
+  }
+
+  Future<void> _switchCamera() async {
+    if (_cameras.length < 2) return;
+    
+    setState(() {
+      _isFrontCamera = !_isFrontCamera;
+      _isInitialized = false;
+    });
+
+    await _cameraController?.dispose();
+    
+    _cameraController = CameraController(
+      _cameras[_isFrontCamera ? 1 : 0],
+      ResolutionPreset.high,
+      enableAudio: true,
+    );
+
+    try {
+      await _cameraController!.initialize();
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
+    } catch (e) {
+      debugPrint('Camera switch error: $e');
+    }
+  }
+
+  Future<void> _toggleFlash() async {
+    if (_cameraController == null) return;
+    
+    setState(() => _isFlashOn = !_isFlashOn);
+    
+    await _cameraController!.setFlashMode(
+      _isFlashOn ? FlashMode.torch : FlashMode.off,
+    );
+  }
+
+  Future<void> _capturePhoto() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    try {
+      // Set flash mode for capture
+      await _cameraController!.setFlashMode(
+        _isFlashOn ? FlashMode.always : FlashMode.off,
+      );
+
+      final XFile photo = await _cameraController!.takePicture();
+      
+      // Navigate to photo editor
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PhotoEditorScreen(
+              imagePath: photo.path,
+              isFromCamera: true,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error capturing photo: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _startVideoRecording() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    try {
+      await _cameraController!.startVideoRecording();
+      setState(() {
+        _isRecording = true;
+        _recordingDuration = 0;
+      });
+      _startRecordingTimer();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error starting video recording: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _stopVideoRecording() async {
+    if (_cameraController == null || !_isRecording) return;
+
+    try {
+      final XFile video = await _cameraController!.stopVideoRecording();
+      setState(() => _isRecording = false);
+      
+      // For now, just show success message
+      // In the future, this would navigate to video editor
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Video saved! Duration: ${_recordingDuration}s'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error stopping video recording: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _startRecordingTimer() {
+    if (!_isRecording) return;
+    
+    Future.delayed(const Duration(seconds: 1), () {
+      if (_isRecording && mounted) {
+        setState(() => _recordingDuration++);
+        if (_recordingDuration >= 60) {
+          _stopVideoRecording(); // Max 60 seconds
+        } else {
+          _startRecordingTimer();
+        }
+      }
+    });
+  }
+
+  void _switchMode(String mode) {
+    if (_isRecording) return;
+    
+    setState(() {
+      _captureMode = mode;
+      _recordingDuration = 0;
+    });
   }
 
   @override
@@ -43,21 +237,77 @@ class _CameraScreenState extends State<CameraScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Column(
-          children: [
-            // Top Controls
-            _buildTopControls(),
-            
-            // Camera Preview Area
-            Expanded(
-              child: _buildCameraPreview(),
-            ),
-            
-            // Bottom Controls
-            _buildBottomControls(),
-          ],
-        ),
+        child: !_permissionGranted
+            ? _buildPermissionDenied()
+            : !_isInitialized
+                ? _buildLoadingScreen()
+                : _buildCameraInterface(),
       ),
+    );
+  }
+
+  Widget _buildPermissionDenied() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.camera_alt_outlined,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Camera Permission Required',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Please allow camera access to take photos',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: Colors.grey[400],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () {
+              openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingScreen() {
+    return const Center(
+      child: CircularProgressIndicator(
+        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+      ),
+    );
+  }
+
+  Widget _buildCameraInterface() {
+    return Column(
+      children: [
+        // Top Controls
+        _buildTopControls(),
+        
+        // Camera Preview
+        Expanded(
+          child: _buildCameraPreview(),
+        ),
+        
+        // Bottom Controls
+        _buildBottomControls(),
+      ],
     );
   }
 
@@ -102,15 +352,10 @@ class _CameraScreenState extends State<CameraScreen>
                 color: Colors.black.withOpacity(0.5),
                 shape: BoxShape.circle,
               ),
-              child: AnimatedBuilder(
-                animation: _flashAnimationController,
-                builder: (context, child) {
-                  return Icon(
-                    _isFlashOn ? Icons.flash_on : Icons.flash_off,
-                    color: _isFlashOn ? Colors.yellow : Colors.white,
-                    size: 24,
-                  );
-                },
+              child: Icon(
+                _isFlashOn ? Icons.flash_on : Icons.flash_off,
+                color: _isFlashOn ? Colors.yellow : Colors.white,
+                size: 24,
               ),
             ),
           ),
@@ -150,93 +395,94 @@ class _CameraScreenState extends State<CameraScreen>
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: Colors.white.withOpacity(0.2),
           width: 1,
         ),
       ),
-      child: Stack(
-        children: [
-          // Camera Preview Placeholder
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.camera_alt,
-                  size: 64,
-                  color: Colors.grey[400],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Camera Preview',
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    color: Colors.grey[400],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _captureMode == 'photo' ? 'Tap to capture photo' : 'Hold to record video',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: Colors.grey[500],
-                  ),
-                ),
-                if (_captureMode == 'video' && _isRecording) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Recording: ${_recordingDuration}s',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          
-          // Camera Switch Button
-          Positioned(
-            top: 16,
-            right: 16,
-            child: GestureDetector(
-              onTap: _switchCamera,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.flip_camera_ios,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-          
-          // Grid Overlay
-          if (_showGrid)
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            // Camera Preview - Fill available space while maintaining aspect ratio
             Positioned.fill(
-              child: CustomPaint(
-                painter: GridPainter(),
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _cameraController!.value.previewSize!.height,
+                  height: _cameraController!.value.previewSize!.width,
+                  child: CameraPreview(_cameraController!),
+                ),
               ),
             ),
-        ],
+            
+            // Grid Overlay
+            if (_showGrid)
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: GridPainter(),
+                ),
+              ),
+            
+            // Camera Switch Button
+            Positioned(
+              top: 16,
+              right: 16,
+              child: GestureDetector(
+                onTap: _switchCamera,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.flip_camera_ios,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+            
+            // Recording Indicator
+            if (_isRecording)
+              Positioned(
+                top: 16,
+                left: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${_recordingDuration}s',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -271,9 +517,10 @@ class _CameraScreenState extends State<CameraScreen>
           
           // Capture Button
           GestureDetector(
-            onTapDown: (_) => _startCapture(),
-            onTapUp: (_) => _stopCapture(),
-            onTapCancel: () => _stopCapture(),
+            onTap: _captureMode == 'photo' ? _capturePhoto : null,
+            onTapDown: _captureMode == 'video' ? (_) => _startVideoRecording() : null,
+            onTapUp: _captureMode == 'video' ? (_) => _stopVideoRecording() : null,
+            onTapCancel: _captureMode == 'video' ? () => _stopVideoRecording() : null,
             child: Container(
               width: 80,
               height: 80,
@@ -281,7 +528,7 @@ class _CameraScreenState extends State<CameraScreen>
                 color: Colors.white,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
+                  color: _isRecording ? Colors.red : Colors.white.withOpacity(0.3),
                   width: 4,
                 ),
               ),
@@ -291,10 +538,15 @@ class _CameraScreenState extends State<CameraScreen>
                   height: 60,
                   decoration: BoxDecoration(
                     color: _isRecording ? Colors.red : Colors.grey[200],
-                    shape: BoxShape.circle,
+                    shape: _isRecording ? BoxShape.rectangle : BoxShape.circle,
+                    borderRadius: _isRecording ? BorderRadius.circular(8) : null,
                   ),
                   child: Icon(
-                    _captureMode == 'photo' ? Icons.camera_alt : Icons.fiber_manual_record,
+                    _captureMode == 'photo' 
+                        ? Icons.camera_alt 
+                        : _isRecording 
+                            ? Icons.stop 
+                            : Icons.fiber_manual_record,
                     color: _isRecording ? Colors.white : Colors.grey[600],
                     size: 32,
                   ),
@@ -329,98 +581,10 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  void _toggleFlash() {
-    setState(() {
-      _isFlashOn = !_isFlashOn;
-    });
-    if (_isFlashOn) {
-      _flashAnimationController.forward();
-    } else {
-      _flashAnimationController.reverse();
-    }
-  }
-
-  void _switchMode(String mode) {
-    setState(() {
-      _captureMode = mode;
-      _isRecording = false;
-      _recordingDuration = 0;
-    });
-    _modeAnimationController.forward().then((_) {
-      _modeAnimationController.reverse();
-    });
-  }
-
-  void _switchCamera() {
-    setState(() {
-      _isFrontCamera = !_isFrontCamera;
-    });
-  }
-
-  void _startCapture() {
-    if (_captureMode == 'video') {
-      setState(() {
-        _isRecording = true;
-      });
-      _startRecordingTimer();
-    } else {
-      _capturePhoto();
-    }
-  }
-
-  void _stopCapture() {
-    if (_captureMode == 'video' && _isRecording) {
-      setState(() {
-        _isRecording = false;
-      });
-      _stopRecordingTimer();
-      _saveVideo();
-    }
-  }
-
-  void _capturePhoto() {
-    // TODO: Implement photo capture
+  void _openGallery() async {
+    // TODO: Implement gallery picker
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Photo captured!'),
-        duration: Duration(milliseconds: 500),
-      ),
-    );
-  }
-
-  void _saveVideo() {
-    // TODO: Implement video save
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Video saved! Duration: ${_recordingDuration}s'),
-        duration: const Duration(milliseconds: 500),
-      ),
-    );
-  }
-
-  void _startRecordingTimer() {
-    // TODO: Implement actual timer
-    Future.delayed(const Duration(seconds: 1), () {
-      if (_isRecording) {
-        setState(() {
-          _recordingDuration++;
-        });
-        _startRecordingTimer();
-      }
-    });
-  }
-
-  void _stopRecordingTimer() {
-    // Timer stops automatically when _isRecording becomes false
-  }
-
-  void _openGallery() {
-    // TODO: Implement gallery access
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Gallery coming soon!'),
-        duration: Duration(milliseconds: 500),
-      ),
+      const SnackBar(content: Text('Gallery picker coming soon!')),
     );
   }
 
@@ -459,34 +623,8 @@ class _CameraScreenState extends State<CameraScreen>
                       subtitle: 'Show grid overlay',
                       value: _showGrid,
                       onChanged: (value) {
-                        setState(() {
-                          _showGrid = value;
-                        });
+                        setState(() => _showGrid = value);
                         Navigator.pop(context);
-                      },
-                    ),
-                    _buildSettingItem(
-                      icon: Icons.timer,
-                      title: 'Timer',
-                      subtitle: 'Set capture timer',
-                      value: false,
-                      onChanged: (value) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Timer feature coming soon!')),
-                        );
-                      },
-                    ),
-                    _buildSettingItem(
-                      icon: Icons.aspect_ratio,
-                      title: 'Aspect Ratio',
-                      subtitle: 'Change aspect ratio',
-                      value: false,
-                      onChanged: (value) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Aspect ratio feature coming soon!')),
-                        );
                       },
                     ),
                   ],
@@ -507,10 +645,7 @@ class _CameraScreenState extends State<CameraScreen>
     required Function(bool) onChanged,
   }) {
     return ListTile(
-      leading: Icon(
-        icon,
-        color: Colors.white,
-      ),
+      leading: Icon(icon, color: Colors.white),
       title: Text(
         title,
         style: GoogleFonts.poppins(
@@ -532,8 +667,6 @@ class _CameraScreenState extends State<CameraScreen>
       ),
     );
   }
-
-  bool _showGrid = false;
 }
 
 class GridPainter extends CustomPainter {

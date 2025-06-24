@@ -34,14 +34,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
     setState(() => _isLoading = true);
     
     try {
+      print('ExploreScreen: Loading public stories...');
       final stories = await _serviceManager.getPublicStories();
-      setState(() {
-        _stories = stories;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
+      print('ExploreScreen: Loaded ${stories.length} stories');
+      
       if (mounted) {
+        setState(() {
+          _stories = stories;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('ExploreScreen: Error loading stories - $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading stories: $e'),
@@ -378,42 +384,126 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Future<void> _viewStory(StoryModel story) async {
+    final currentUserId = _serviceManager.currentUserId ?? '';
+    
+    // Don't update UI if already viewed
+    if (story.hasUserViewed(currentUserId)) {
+      return;
+    }
+    
+    // Optimistic UI update - immediately update the local state
+    final updatedStory = _updateStoryViewOptimistically(story, currentUserId);
+    final storyIndex = _stories.indexWhere((s) => s.id == story.id);
+    if (storyIndex != -1) {
+      setState(() {
+        _stories[storyIndex] = updatedStory;
+      });
+    }
+    
     try {
+      // Sync with database in the background
       await _serviceManager.viewStory(story.id);
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Story viewed!')),
+        const SnackBar(
+          content: Text('Story viewed!'),
+          backgroundColor: Colors.green,
+          duration: Duration(milliseconds: 1000),
+        ),
       );
+      
+      // Optionally refresh from server to ensure consistency (but don't await it)
+      _loadStories();
+      
     } catch (e) {
+      // Revert the optimistic update on error
+      if (storyIndex != -1) {
+        setState(() {
+          _stories[storyIndex] = story; // Revert to original state
+        });
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error viewing story: $e'),
+          content: Text('Failed to view story: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(milliseconds: 2000),
         ),
       );
     }
   }
+  
+  StoryModel _updateStoryViewOptimistically(StoryModel story, String userId) {
+    final currentViewedBy = List<String>.from(story.viewedBy);
+    int newViewCount = story.viewCount;
+    
+    if (!currentViewedBy.contains(userId)) {
+      currentViewedBy.add(userId);
+      newViewCount++;
+    }
+    
+    return story.copyWith(
+      viewedBy: currentViewedBy,
+      viewCount: newViewCount,
+    );
+  }
 
   Future<void> _toggleLike(StoryModel story) async {
+    final currentUserId = _serviceManager.currentUserId ?? '';
+    final isCurrentlyLiked = story.hasUserLiked(currentUserId);
+    
+    // Optimistic UI update - immediately update the local state
+    final updatedStory = _updateStoryLikeOptimistically(story, currentUserId, !isCurrentlyLiked);
+    final storyIndex = _stories.indexWhere((s) => s.id == story.id);
+    if (storyIndex != -1) {
+      setState(() {
+        _stories[storyIndex] = updatedStory;
+      });
+    }
+    
     try {
-      if (story.hasUserLiked(_serviceManager.currentUserId ?? '')) {
-        // Unlike logic would go here
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unlike feature coming soon!')),
-        );
-      } else {
-        await _serviceManager.likeStory(story.id);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Story liked!')),
-        );
-      }
+      // Sync with database in the background
+      await _serviceManager.likeStory(story.id);
+      
+      // Optionally refresh from server to ensure consistency (but don't await it)
+      _loadStories();
+      
     } catch (e) {
+      // Revert the optimistic update on error
+      if (storyIndex != -1) {
+        setState(() {
+          _stories[storyIndex] = story; // Revert to original state
+        });
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error liking story: $e'),
+          content: Text('Failed to ${!isCurrentlyLiked ? "like" : "unlike"} story: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(milliseconds: 2000),
         ),
       );
     }
+  }
+  
+  StoryModel _updateStoryLikeOptimistically(StoryModel story, String userId, bool isLiked) {
+    final currentLikedBy = List<String>.from(story.likedBy);
+    int newLikeCount = story.likeCount;
+    
+    if (isLiked && !currentLikedBy.contains(userId)) {
+      // Add like
+      currentLikedBy.add(userId);
+      newLikeCount++;
+    } else if (!isLiked && currentLikedBy.contains(userId)) {
+      // Remove like
+      currentLikedBy.remove(userId);
+      newLikeCount--;
+    }
+    
+    return story.copyWith(
+      likedBy: currentLikedBy,
+      likeCount: newLikeCount,
+    );
   }
 
   void _shareStory(StoryModel story) {

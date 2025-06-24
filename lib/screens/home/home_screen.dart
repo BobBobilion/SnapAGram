@@ -7,6 +7,7 @@ import '../explore/explore_screen.dart';
 import '../friends/friends_screen.dart';
 import '../chats/chats_screen.dart';
 import '../account/account_screen.dart';
+import '../camera/camera_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,17 +18,28 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  late List<Widget> _screens;
 
   // Define the accent blue color from PRD
   static const Color accentBlue = Color(0xFF2196F3);
 
-  final List<Widget> _screens = [
-    const ExploreScreen(),
-    const FriendsScreen(),
-    const PlaceholderScreen(), // Post screen will be handled by FAB
-    const ChatsScreen(),
-    const AccountScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      const ExploreScreen(),
+      const FriendsScreen(),
+      const PlaceholderScreen(), // Post screen will be handled by FAB
+      const ChatsScreen(),
+      AccountScreen(onNavigateToTab: _navigateToTab),
+    ];
+  }
+
+  void _navigateToTab(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,11 +103,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildCameraButton() {
     return GestureDetector(
       onTap: () {
-        // Navigate to camera/post screen
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Camera/Post feature coming soon!'),
-            duration: Duration(milliseconds: 500),
+        // Navigate to camera screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CameraScreen(),
           ),
         );
       },
@@ -134,9 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final isSelected = _currentIndex == index;
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _currentIndex = index;
-        });
+        _navigateToTab(index);
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,

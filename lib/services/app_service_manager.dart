@@ -67,8 +67,8 @@ class AppServiceManager extends ChangeNotifier {
     return await UserDatabaseService.getAllUserIdentifiers();
   }
 
-  Future<UserModel?> getUserById(String uid) async {
-    return await UserDatabaseService.getUserById(uid);
+  Future<UserModel?> getUserById(String userId) async {
+    return await UserDatabaseService.getUserById(userId);
   }
 
   Future<UserModel?> getUserByUsername(String username) async {
@@ -108,6 +108,14 @@ class AppServiceManager extends ChangeNotifier {
   Future<void> blockUser(String userIdToBlock) async {
     if (currentUserId == null) throw Exception('User not authenticated');
     await UserDatabaseService.blockUser(currentUserId!, userIdToBlock);
+  }
+
+  Future<void> fixFriendsCount(String userId) async {
+    await UserDatabaseService.fixFriendsCount(userId);
+  }
+
+  Future<void> fixAllFriendsCounts() async {
+    await UserDatabaseService.fixAllFriendsCounts();
   }
 
   // Story Operations
@@ -202,6 +210,10 @@ class AppServiceManager extends ChangeNotifier {
   Future<List<ChatModel>> getCurrentUserChats() async {
     if (currentUserId == null) return [];
     return await ChatDatabaseService.getUserChats(currentUserId!);
+  }
+
+  Future<ChatModel?> getChatById(String chatId) async {
+    return await ChatDatabaseService.getChatById(chatId);
   }
 
   Future<String> sendMessage({

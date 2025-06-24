@@ -8,7 +8,9 @@ import '../auth/login_screen.dart';
 import 'dart:async';
 
 class AccountScreen extends StatefulWidget {
-  const AccountScreen({super.key});
+  final Function(int)? onNavigateToTab;
+  
+  const AccountScreen({super.key, this.onNavigateToTab});
 
   @override
   State<AccountScreen> createState() => _AccountScreenState();
@@ -19,7 +21,6 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     final authService = context.watch<AuthService>();
     final user = authService.user;
-    final userModel = authService.userModel;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -41,62 +42,69 @@ class _AccountScreenState extends State<AccountScreen> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Profile Card
-              _buildProfileCard(user, userModel),
-              const SizedBox(height: 24),
+        child: StreamBuilder<UserModel?>(
+          stream: authService.userStream,
+          builder: (context, snapshot) {
+            final userModel = snapshot.data ?? authService.userModel;
+            
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Profile Card
+                  _buildProfileCard(user, userModel),
+                  const SizedBox(height: 24),
 
-              // Quick Stats
-              _buildQuickStats(userModel),
-              const SizedBox(height: 24),
+                  // Quick Stats
+                  _buildQuickStats(userModel),
+                  const SizedBox(height: 24),
 
-              // Settings Section
-              Text(
-                'Settings',
-                style: GoogleFonts.poppins(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
+                  // Settings Section
+                  Text(
+                    'Settings',
+                    style: GoogleFonts.poppins(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Settings Cards
+                  _buildSettingsSection(),
+                  const SizedBox(height: 24),
+
+                  // Privacy Section
+                  Text(
+                    'Privacy & Security',
+                    style: GoogleFonts.poppins(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildPrivacySection(),
+                  const SizedBox(height: 24),
+
+                  // Support Section
+                  Text(
+                    'Support & Legal',
+                    style: GoogleFonts.poppins(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildSupportSection(),
+                ],
               ),
-              const SizedBox(height: 16),
-
-              // Settings Cards
-              _buildSettingsSection(),
-              const SizedBox(height: 24),
-
-              // Privacy Section
-              Text(
-                'Privacy & Security',
-                style: GoogleFonts.poppins(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              _buildPrivacySection(),
-              const SizedBox(height: 24),
-
-              // Support Section
-              Text(
-                'Support & Legal',
-                style: GoogleFonts.poppins(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              _buildSupportSection(),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -366,32 +374,36 @@ class _AccountScreenState extends State<AccountScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: color,
-              size: 24,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+      child: InkWell(
+        onTap: title == 'Friends' ? _navigateToFriendsTab : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                color: color,
+                size: 24,
               ),
-            ),
-            Text(
-              title,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: Colors.grey[600],
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
               ),
-            ),
-          ],
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -624,7 +636,7 @@ class _AccountScreenState extends State<AccountScreen> {
         return AlertDialog(
           title: Text(
             'Sign Out',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
           ),
           content: Text(
             'Are you sure you want to sign out?',
@@ -635,44 +647,34 @@ class _AccountScreenState extends State<AccountScreen> {
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'Cancel',
-                style: TextStyle(color: Colors.grey[600]),
+                style: GoogleFonts.poppins(color: Colors.grey[600]),
               ),
             ),
             TextButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                try {
-                  final authService = context.read<AuthService>();
-                  await authService.signOut();
-                  if (context.mounted) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (context) => const LoginScreen(),
-                      ),
-                      (route) => false,
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error signing out: $e'),
-                        backgroundColor: Colors.red,
-                        duration: const Duration(milliseconds: 500),
-                      ),
-                    );
-                  }
+                await context.read<AuthService>().signOut();
+                if (context.mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const LoginScreen()),
+                    (route) => false,
+                  );
                 }
               },
               child: Text(
                 'Sign Out',
-                style: TextStyle(color: Colors.red[600]),
+                style: GoogleFonts.poppins(color: Colors.red),
               ),
             ),
           ],
         );
       },
     );
+  }
+
+  void _navigateToFriendsTab() {
+    // Navigate to friends tab (index 1) using the callback
+    widget.onNavigateToTab?.call(1);
   }
 
   void _showEditHandleDialog(BuildContext context, UserModel? userModel) {

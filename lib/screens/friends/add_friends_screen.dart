@@ -452,6 +452,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
 
   Widget _buildUserCard(UserModel user) {
     final hasSentInvite = _sentInvites.contains(user.uid);
+    final isAlreadyFriend = _serviceManager.currentUser?.friends.contains(user.uid) ?? false;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -525,8 +526,35 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
             
             const SizedBox(width: 16),
             
-            // Add Button
-            if (hasSentInvite)
+            // Status Button
+            if (isAlreadyFriend)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.people,
+                      size: 16,
+                      color: Colors.grey[700],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Friends',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (hasSentInvite)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(

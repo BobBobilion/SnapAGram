@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
 import '../../models/chat_model.dart';
+import 'chat_conversation_screen.dart';
 
 class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
@@ -36,13 +37,15 @@ class _ChatsScreenState extends State<ChatsScreen> {
     
     try {
       final chats = await _serviceManager.getCurrentUserChats();
-      setState(() {
-        _chats = chats;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
       if (mounted) {
+        setState(() {
+          _chats = chats;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading chats: $e'),
@@ -113,7 +116,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
               },
             ),
           ),
-          
           // Chats List
           Expanded(
             child: RefreshIndicator(
@@ -353,8 +355,15 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   void _openChat(ChatModel chat) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Opening chat with ${chat.getDisplayName(_serviceManager.currentUserId ?? '')}')),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatConversationScreen(
+          chatId: chat.id,
+          otherUserId: chat.getOtherParticipant(_serviceManager.currentUserId ?? ''),
+          otherUserName: chat.getDisplayName(_serviceManager.currentUserId ?? ''),
+        ),
+      ),
     );
   }
 

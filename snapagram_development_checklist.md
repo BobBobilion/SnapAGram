@@ -14,7 +14,7 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 - [x] **Phase 1:** Environment & Project Foundation
 - [x] **Phase 2:** User Authentication & Application Shell
 - [ ] **Phase 3:** Core Backend Services
-- [ ] **Phase 4:** Social Graph & Friends Management
+- [x] **Phase 4:** Social Graph & Friends Management
 - [ ] **Phase 5:** Secure Messaging System
 - [ ] **Phase 6:** Media Capture & Creation
 - [ ] **Phase 7:** Media Editing & Augmentation
@@ -79,11 +79,11 @@ This checklist provides a structured, granular approach to the Snapagram MVP dev
 **Criteria:** Allowing users to connect with each other, which is a prerequisite for most social features.
 
 ### Feature 4.1: User Discovery & Requests
-- [ ] Implement a user search feature that allows finding others by their unique username.
-- [ ] Develop the functionality to send, view, accept, and decline friend requests.
+- [x] Implement a user search feature that allows finding others by their unique username.
+- [x] Develop the functionality to send, view, accept, and decline friend requests.
 
 ### Feature 4.2: Friends List
-- [ ] Create a "Friends" list UI within the Friends tab or Account screen that displays the current user's accepted friends.
+- [x] Create a "Friends" list UI within the Friends tab or Account screen that displays the current user's accepted friends.
 
 ---
 

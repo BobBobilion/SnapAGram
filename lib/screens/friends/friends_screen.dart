@@ -4,6 +4,7 @@ import '../../services/app_service_manager.dart';
 import '../../models/story_model.dart';
 import '../../models/user_model.dart';
 import 'add_friends_screen.dart';
+import '../chats/chat_conversation_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
   const FriendsScreen({super.key});
@@ -86,13 +87,15 @@ class _FriendsScreenState extends State<FriendsScreen>
     
     try {
       final friends = await _serviceManager.getCurrentUserFriends();
-      setState(() {
-        _friends = friends;
-        _isLoadingFriends = false;
-      });
-    } catch (e) {
-      setState(() => _isLoadingFriends = false);
       if (mounted) {
+        setState(() {
+          _friends = friends;
+          _isLoadingFriends = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingFriends = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading friends: $e'),
@@ -110,13 +113,15 @@ class _FriendsScreenState extends State<FriendsScreen>
     
     try {
       final requests = await _serviceManager.getFriendRequests();
-      setState(() {
-        _friendRequests = requests;
-        _isLoadingRequests = false;
-      });
-    } catch (e) {
-      setState(() => _isLoadingRequests = false);
       if (mounted) {
+        setState(() {
+          _friendRequests = requests;
+          _isLoadingRequests = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingRequests = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading friend requests: $e'),
@@ -250,16 +255,19 @@ class _FriendsScreenState extends State<FriendsScreen>
                 ),
             ],
           ),
-          IconButton(
-            icon: const Icon(Icons.person_add),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AddFriendsScreen(),
-                ),
-              );
-            },
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: IconButton(
+              icon: const Icon(Icons.person_add),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AddFriendsScreen(),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -818,36 +826,59 @@ class _FriendsScreenState extends State<FriendsScreen>
               ),
           ],
         ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: friend.isOnline ? Colors.green[100] : Colors.grey[100],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!friend.isOnline)
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: Colors.red[500],
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              if (!friend.isOnline)
-                const SizedBox(width: 4),
-              Text(
-                friend.isOnline ? 'Online' : 'Offline',
-                style: GoogleFonts.poppins(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: friend.isOnline ? Colors.green[700] : Colors.grey[700],
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Message Button
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.blue[600],
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.message, color: Colors.white, size: 20),
+                onPressed: () => _startChatWithFriend(friend),
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            // Online Status
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: friend.isOnline ? Colors.green[100] : Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!friend.isOnline)
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Colors.red[500],
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  if (!friend.isOnline)
+                    const SizedBox(width: 4),
+                  Text(
+                    friend.isOnline ? 'Online' : 'Offline',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: friend.isOnline ? Colors.green[700] : Colors.grey[700],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         onTap: () => _showFriendProfile(friend),
       ),
@@ -917,5 +948,35 @@ class _FriendsScreenState extends State<FriendsScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Share feature coming soon!')),
     );
+  }
+
+  Future<void> _startChatWithFriend(UserModel friend) async {
+    try {
+      // Create or get existing direct chat
+      final chatId = await _serviceManager.createDirectChat(friend.uid);
+      
+      // Navigate to chat conversation screen
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatConversationScreen(
+              chatId: chatId,
+              otherUserId: friend.uid,
+              otherUserName: friend.displayName,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting chat: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 } 
