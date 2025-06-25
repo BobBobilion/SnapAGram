@@ -70,6 +70,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Redirect to LoginScreen if the user becomes unauthenticated
+    final isAuthenticated = context.watch<AuthService>().isAuthenticated;
+    if (!isAuthenticated) {
+      // Ensure navigation happens after the current frame to avoid build conflicts
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            (route) => false,
+          );
+        }
+      });
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: PageView(
