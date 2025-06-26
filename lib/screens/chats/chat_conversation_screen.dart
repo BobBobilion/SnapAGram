@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/app_service_manager.dart';
+import '../../services/auth_service.dart';
 import '../../services/storage_service.dart';
 import '../../models/chat_model.dart';
 import '../../models/message_model.dart';
 import '../../models/user_model.dart';
+import '../../utils/app_theme.dart';
 
 class ChatConversationScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -391,6 +393,8 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
   @override
   Widget build(BuildContext context) {
     final serviceManager = ref.read(appServiceManagerProvider);
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
     final currentUserId = serviceManager.currentUserId ?? '';
     final chatName = _chat?.getDisplayName(currentUserId) ?? widget.otherUserName ?? 'Chat';
     return Scaffold(
@@ -400,18 +404,18 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
           chatName,
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.blue[600],
+            color: Colors.grey[800],
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back, color: Colors.grey[600]),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert),
+            icon: Icon(Icons.more_vert, color: Colors.grey[600]),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Chat options coming soon!')),
@@ -481,7 +485,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                               final message = _messages[index];
                               final nextMessage = (index > 0) ? _messages[index - 1] : null;
                               final bool showAvatar = nextMessage == null || nextMessage.senderId != message.senderId;
-                              return _buildMessageItem(message, showAvatar);
+                              return _buildMessageItem(message, showAvatar, userModel);
                             },
                           ),
               ],
@@ -511,12 +515,12 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                   ),
                   child: IconButton(
                     icon: _isUploadingImage
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.getPrimaryColor(userModel)),
                             ),
                           )
                         : Icon(Icons.camera_alt, color: Colors.grey[600]),
@@ -548,7 +552,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                 const SizedBox(width: 8),
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.blue[600],
+                    color: AppTheme.getColorShade(userModel, 600),
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
@@ -573,7 +577,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     );
   }
 
-  Widget _buildMessageItem(MessageModel message, bool showAvatar) {
+  Widget _buildMessageItem(MessageModel message, bool showAvatar, userModel) {
     final isCurrentUser = message.senderId == ref.read(appServiceManagerProvider).currentUserId;
     final isDeleted = message.isDeleted;
     final timeLeft = _getMessageTimeLeft(message);
@@ -588,7 +592,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
             if (showAvatar)
               CircleAvatar(
                 radius: 16,
-                backgroundColor: Colors.blue[100],
+                backgroundColor: AppTheme.getColorShade(userModel, 100),
                 backgroundImage: message.senderProfilePicture != null
                     ? NetworkImage(message.senderProfilePicture!)
                     : null,
@@ -598,7 +602,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                             ? message.senderUsername[0].toUpperCase()
                             : 'U',
                         style: TextStyle(
-                          color: Colors.blue[600],
+                          color: AppTheme.getColorShade(userModel, 600),
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                         ),
@@ -614,7 +618,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: isCurrentUser ? Colors.blue[600] : Colors.white,
+                color: isCurrentUser ? AppTheme.getColorShade(userModel, 600) : Colors.white,
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
@@ -822,7 +826,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
             if (showAvatar)
               CircleAvatar(
                 radius: 16,
-                backgroundColor: Colors.blue[100],
+                backgroundColor: AppTheme.getColorShade(userModel, 100),
                 backgroundImage: ref.read(appServiceManagerProvider).currentUser?.profilePictureUrl != null
                     ? NetworkImage(ref.read(appServiceManagerProvider).currentUser!.profilePictureUrl!)
                     : null,
@@ -832,7 +836,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                             ? ref.read(appServiceManagerProvider).currentUser!.displayName[0].toUpperCase()
                             : 'U',
                         style: TextStyle(
-                          color: Colors.blue[600],
+                          color: AppTheme.getColorShade(userModel, 600),
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                         ),

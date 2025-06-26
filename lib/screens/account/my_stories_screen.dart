@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
 import '../../services/auth_service.dart';
 import '../../models/story_model.dart';
+import '../../utils/app_theme.dart';
 
 class MyStoriesScreen extends ConsumerStatefulWidget {
   const MyStoriesScreen({super.key});
@@ -74,13 +75,13 @@ class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
           'My Stories',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.blue[600],
+            color: Colors.grey[800],
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back, color: Colors.grey[600]),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -155,7 +156,7 @@ class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
           // Story Header
           ListTile(
             leading: CircleAvatar(
-              backgroundColor: Colors.blue[100],
+              backgroundColor: AppTheme.getColorShade(userModel, 100),
               backgroundImage: (userModel?.profilePictureUrl ?? user?.photoURL) != null
                   ? NetworkImage(userModel?.profilePictureUrl ?? user?.photoURL)
                   : null,
@@ -163,7 +164,7 @@ class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
                   ? Text(
                       (userModel?.displayName ?? user?.displayName ?? user?.email ?? 'U')[0].toUpperCase(),
                       style: TextStyle(
-                        color: Colors.blue[600],
+                        color: AppTheme.getColorShade(userModel, 600),
                         fontWeight: FontWeight.bold,
                       ),
                     )
@@ -199,7 +200,7 @@ class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
                   value: 'edit',
                   child: Row(
                     children: [
-                      Icon(Icons.edit, color: Colors.blue[600]),
+                      Icon(Icons.edit, color: AppTheme.getColorShade(userModel, 600)),
                       const SizedBox(width: 8),
                       Text('Edit Caption', style: GoogleFonts.poppins()),
                     ],
@@ -368,6 +369,8 @@ class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
   void _showEditCaptionDialog(StoryModel story) {
     final captionController = TextEditingController(text: story.caption ?? '');
     bool isLoading = false;
+    final authService = ref.read(authServiceProvider);
+    final userModel = authService.userModel;
 
     showDialog(
       context: context,
@@ -393,7 +396,7 @@ class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.blue[600]!),
+                    borderSide: BorderSide(color: AppTheme.getColorShade(userModel, 600) ?? Colors.blue),
                   ),
                 ),
                 maxLines: 3,
@@ -452,7 +455,7 @@ class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
                         )
                       : Text(
                           'Save',
-                          style: TextStyle(color: Colors.blue[600]),
+                          style: TextStyle(color: AppTheme.getColorShade(userModel, 600)),
                         ),
                 ),
               ],

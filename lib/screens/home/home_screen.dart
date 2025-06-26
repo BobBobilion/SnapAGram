@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
+import '../../utils/app_theme.dart';
 import '../auth/login_screen.dart';
 import '../explore/explore_screen.dart';
 import '../friends/friends_screen.dart';
@@ -21,9 +22,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   late List<Widget> _screens;
   late PageController _pageController;
 
-  // Define the accent colors for DogWalk - blue theme
-  static const Color accentBlue = Color(0xFF6495ED); // Cornflower blue
-  static const Color accentLightBlue = Color(0xFF87CEEB); // Sky blue
+  // Colors are now dynamically determined by user role via AppTheme
 
   @override
   void initState() {
@@ -153,13 +152,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildCameraButton() {
+    final authService = ref.watch(authServiceProvider);
+    final user = authService.userModel;
+    final accentColor = AppTheme.getPrimaryColor(user);
+    
     return GestureDetector(
       onTap: () => _navigateToTab(2), // Use the centralized navigation
       child: Container(
         height: 60,
         width: 60,
         decoration: BoxDecoration(
-          color: accentBlue,
+          color: accentColor,
           shape: BoxShape.circle,
           border: Border.all(
             color: Colors.white,
@@ -167,7 +170,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: accentBlue.withOpacity(0.3),
+              color: accentColor.withOpacity(0.3),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -187,7 +190,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required String label,
     required int index,
   }) {
+    final authService = ref.watch(authServiceProvider);
+    final user = authService.userModel;
     final isSelected = _currentIndex == index;
+    
     return GestureDetector(
       onTap: () {
         _navigateToTab(index);
@@ -195,20 +201,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-                  Icon(
-          icon,
-          color: isSelected ? accentBlue : Colors.grey[600],
-          size: 24,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-            color: isSelected ? accentBlue : Colors.grey[600],
+          Icon(
+            icon,
+            color: AppTheme.getIconColor(user, isSelected),
+            size: 24,
           ),
-        ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              color: AppTheme.getTextColor(user, isSelected),
+            ),
+          ),
         ],
       ),
     );

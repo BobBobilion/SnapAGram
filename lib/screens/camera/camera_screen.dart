@@ -3,16 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../services/auth_service.dart';
+import '../../utils/app_theme.dart';
 import 'photo_editor_screen.dart';
 
-class CameraScreen extends StatefulWidget {
+class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
 
   @override
-  State<CameraScreen> createState() => _CameraScreenState();
+  ConsumerState<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver {
+class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBindingObserver {
   CameraController? _cameraController;
   List<CameraDescription> _cameras = [];
   bool _isInitialized = false;
@@ -374,24 +377,28 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   }
 
   Widget _buildModeButton(String mode, String label) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
     final isSelected = _captureMode == mode;
+    final primaryColor = AppTheme.getPrimaryColor(userModel);
+    
     return GestureDetector(
       onTap: () => _switchMode(mode),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue : Colors.transparent,
+          color: isSelected ? primaryColor : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: Colors.blue,
+            color: primaryColor,
             width: 1,
           ),
         ),
         child: Text(
           label,
           style: GoogleFonts.poppins(
-            color: isSelected ? Colors.white : Colors.blue,
+            color: isSelected ? Colors.white : primaryColor,
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
@@ -530,7 +537,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: Colors.blue,
+                color: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: _isRecording ? Colors.red : Colors.white,
@@ -652,7 +659,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: Colors.blue,
+        activeColor: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
       ),
     );
   }

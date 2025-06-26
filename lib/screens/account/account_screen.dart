@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../services/user_database_service.dart';
 import '../../models/user_model.dart';
 import '../../models/enums.dart';
+import '../../utils/app_theme.dart';
 import '../auth/login_screen.dart';
 import '../auth/complete_onboarding_screen.dart';
 import 'my_stories_screen.dart';
@@ -24,6 +25,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Widget build(BuildContext context) {
     final authService = ref.watch(authServiceProvider);
     final user = authService.user;
+    final userModel = authService.userModel;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -32,14 +34,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           'Account',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF6495ED),
+            color: Colors.grey[800],
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: Icon(Icons.logout, color: Colors.grey[600]),
             onPressed: () => _showSignOutDialog(context),
           ),
         ],
@@ -138,7 +140,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 // User Avatar at the top
                 CircleAvatar(
                   radius: 50,
-                  backgroundColor: Colors.blue[100],
+                  backgroundColor: AppTheme.getColorShade(userModel, 100),
                   backgroundImage: profilePicture != null
                       ? NetworkImage(profilePicture)
                       : null,
@@ -146,7 +148,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       ? Icon(
                           Icons.person,
                           size: 50,
-                          color: Colors.blue[600],
+                          color: AppTheme.getPrimaryColor(userModel),
                         )
                       : null,
                 ),
@@ -186,7 +188,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: userModel?.isOwner == true ? Colors.green[100] : Colors.blue[100],
+                            color: AppTheme.getColorShade(userModel, 100),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -194,7 +196,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                             style: GoogleFonts.poppins(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: userModel?.isOwner == true ? Colors.green[700] : Colors.blue[700],
+                              color: AppTheme.getColorShade(userModel, 700),
                             ),
                           ),
                         ),
@@ -299,7 +301,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                           // Walker Information
                           Row(
                             children: [
-                              Icon(Icons.directions_walk, size: 16, color: Colors.blue[600]),
+                              Icon(Icons.directions_walk, size: 16, color: AppTheme.getPrimaryColor(userModel)),
                               const SizedBox(width: 6),
                               Text(
                                 'Dog Walker',
@@ -367,7 +369,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   value: 'edit_handle',
                   child: Row(
                     children: [
-                      Icon(Icons.alternate_email, color: Colors.blue[600]),
+                      Icon(Icons.alternate_email, color: AppTheme.getPrimaryColor(userModel)),
                       const SizedBox(width: 8),
                       Text('Change Handle', style: GoogleFonts.poppins()),
                     ],
@@ -433,6 +435,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   Widget _buildStatItem(String label, String value) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    
     return Column(
       children: [
         Text(
@@ -440,7 +445,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           style: GoogleFonts.poppins(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Colors.blue[600],
+            color: AppTheme.getPrimaryColor(userModel),
           ),
         ),
         Text(
@@ -467,7 +472,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             icon: Icons.people,
             title: 'Connections',
             value: connectionsCount.toString(),
-            color: Colors.blue,
+            color: AppTheme.getPrimaryColor600(userModel),
+            userModel: userModel,
           ),
         ),
         const SizedBox(width: 12),
@@ -477,6 +483,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             title: 'Stories',
             value: storiesCount.toString(),
             color: Colors.purple,
+            userModel: userModel,
           ),
         ),
       ],
@@ -488,6 +495,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     required String title,
     required String value,
     required Color color,
+    UserModel? userModel,
   }) {
     return Card(
       elevation: 1,
@@ -711,6 +719,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    
     return Card(
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 8),
@@ -720,7 +731,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       child: ListTile(
         leading: Icon(
           icon,
-          color: Colors.blue[600],
+          color: AppTheme.getPrimaryColor(userModel),
         ),
         title: Text(
           title,
@@ -918,6 +929,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   void _showAboutDialog(BuildContext context) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    
     showAboutDialog(
       context: context,
       applicationName: 'DogWalk',
@@ -926,7 +940,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: const Color(0xFF6495ED),
+          color: AppTheme.getPrimaryColor(userModel),
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Icon(
@@ -1109,10 +1123,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(color: Colors.grey[300]!),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.blue[600]!),
-                      ),
+                                                focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.getPrimaryColor(userModel)),
+                          ),
                       suffixIcon: isCheckingHandle
                           ? const SizedBox(
                               width: 20,
@@ -1205,7 +1219,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         )
                       : Text(
                           'Confirm',
-                          style: TextStyle(color: Colors.blue[600]),
+                          style: TextStyle(color: AppTheme.getPrimaryColor(userModel)),
                         ),
                 ),
               ],
@@ -1217,17 +1231,20 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   void _showRedoOnboardingDialog(BuildContext context) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text(
-            'Redo Onboarding',
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold,
-              color: Colors.blue[600],
+                      title: Text(
+              'Redo Onboarding',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.getPrimaryColor(userModel),
+              ),
             ),
-          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1325,7 +1342,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
+                backgroundColor: AppTheme.getPrimaryColor(userModel),
                 foregroundColor: Colors.white,
               ),
               child: Text(

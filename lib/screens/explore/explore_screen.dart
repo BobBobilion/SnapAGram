@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
+import '../../services/auth_service.dart';
 import '../../models/story_model.dart';
+import '../../utils/app_theme.dart';
 
 class ExploreScreen extends ConsumerStatefulWidget {
   const ExploreScreen({super.key});
@@ -170,6 +172,10 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
 
   @override
   Widget build(BuildContext context) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    final primaryColor = AppTheme.getPrimaryColor(userModel);
+    
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -177,16 +183,16 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           'Walk Stories',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF6495ED),
+            color: Colors.grey[800],
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: const Color(0xFF6495ED),
+          labelColor: primaryColor,
           unselectedLabelColor: Colors.grey[600],
-          indicatorColor: const Color(0xFF6495ED),
+          indicatorColor: primaryColor,
           labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
           tabs: const [
             Tab(text: 'All Walks'),
@@ -195,7 +201,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
+            icon: Icon(Icons.search, color: Colors.grey[600]),
             onPressed: () {
               // TODO: Implement search functionality
               ScaffoldMessenger.of(context).showSnackBar(
@@ -207,7 +213,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
             },
           ),
           IconButton(
-            icon: const Icon(Icons.filter_list),
+            icon: Icon(Icons.filter_list, color: Colors.grey[600]),
             onPressed: () {
               // TODO: Implement filter functionality
               ScaffoldMessenger.of(context).showSnackBar(
@@ -223,17 +229,17 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildPublicStoriesTab(),
-          _buildFriendsStoriesTab(),
+          _buildPublicStoriesTab(userModel),
+          _buildFriendsStoriesTab(userModel),
         ],
       ),
     );
   }
 
-  Widget _buildPublicStoriesTab() {
+  Widget _buildPublicStoriesTab(userModel) {
     return RefreshIndicator(
       onRefresh: _refreshPublicStories,
-      color: Colors.blue[600],
+      color: AppTheme.getColorShade(userModel, 600),
       backgroundColor: Colors.white,
       child: _buildStoriesFeed(
         stories: _publicStories,
@@ -242,11 +248,12 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         emptyMessage: 'No walk stories yet',
         emptySubMessage: 'Walkers haven\'t shared any walks yet!',
         storyType: 'public',
+        userModel: userModel,
       ),
     );
   }
 
-  Widget _buildFriendsStoriesTab() {
+  Widget _buildFriendsStoriesTab(userModel) {
     return RefreshIndicator(
       onRefresh: _refreshFriendsStories,
       color: Colors.green[600],
@@ -258,6 +265,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         emptyMessage: 'No connection walks yet',
         emptySubMessage: 'Your connections haven\'t shared any walk stories',
         storyType: 'friends',
+        userModel: userModel,
       ),
     );
   }
@@ -269,6 +277,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     required String emptyMessage,
     required String emptySubMessage,
     required String storyType,
+    required userModel,
   }) {
     if (isLoading && stories.isEmpty) {
       return const Center(
@@ -315,14 +324,14 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       itemBuilder: (context, index) {
         if (index == stories.length) {
           // Show refresh button at the bottom
-          return _buildRefreshButton(storyType);
+          return _buildRefreshButton(storyType, userModel);
         }
-        return _buildStoryCard(stories[index], storyType);
+        return _buildStoryCard(stories[index], storyType, userModel);
       },
     );
   }
 
-  Widget _buildStoryCard(StoryModel story, String storyType) {
+  Widget _buildStoryCard(StoryModel story, String storyType, userModel) {
     final timeAgo = _getTimeAgo(story.createdAt);
     final isLiked = story.hasUserLiked(ref.read(appServiceManagerProvider).currentUserId ?? '');
     final isViewed = story.hasUserViewed(ref.read(appServiceManagerProvider).currentUserId ?? '');
@@ -339,7 +348,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           // Story Header
           ListTile(
             leading: CircleAvatar(
-              backgroundColor: storyType == 'friends' ? Colors.green[100] : Colors.blue[100],
+              backgroundColor: storyType == 'friends' ? Colors.green[100] : AppTheme.getColorShade(userModel, 100),
               backgroundImage: story.creatorProfilePicture != null
                   ? NetworkImage(story.creatorProfilePicture!)
                   : null,
@@ -349,7 +358,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                           ? story.creatorUsername[0].toUpperCase()
                           : 'U',
                       style: TextStyle(
-                        color: storyType == 'friends' ? Colors.green[600] : Colors.blue[600],
+                        color: storyType == 'friends' ? Colors.green[600] : AppTheme.getColorShade(userModel, 600),
                         fontWeight: FontWeight.bold,
                       ),
                     )
@@ -374,7 +383,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                     ? Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.blue[100],
+                          color: AppTheme.getColorShade(userModel, 100),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -382,7 +391,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                           style: GoogleFonts.poppins(
                             fontSize: 10,
                             fontWeight: FontWeight.w500,
-                            color: Colors.blue[700],
+                            color: AppTheme.getColorShade(userModel, 700),
                           ),
                         ),
                       )
@@ -719,9 +728,11 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     );
   }
 
-  Widget _buildRefreshButton(String storyType) {
+  Widget _buildRefreshButton(String storyType, userModel) {
     final isPublic = storyType == 'public';
     final isLoading = isPublic ? _isLoadingPublic : _isLoadingFriends;
+    final themeColor = isPublic ? AppTheme.getColorShade(userModel, 600) : Colors.green[600];
+    final themeLightColor = isPublic ? AppTheme.getColorShade(userModel, 300) : Colors.green[300];
     
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 20, horizontal: 32),
@@ -760,7 +771,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                     )
                   : Icon(
                       Icons.refresh,
-                      color: isPublic ? Colors.blue[600] : Colors.green[600],
+                      color: themeColor,
                     ),
               label: Text(
                 isLoading 
@@ -771,18 +782,18 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                   fontWeight: FontWeight.w600,
                   color: isLoading 
                       ? Colors.grey[500] 
-                      : (isPublic ? Colors.blue[600] : Colors.green[600]),
+                      : themeColor,
                 ),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
-                foregroundColor: isPublic ? Colors.blue[600] : Colors.green[600],
+                foregroundColor: themeColor,
                 elevation: 2,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
-                    color: isPublic ? Colors.blue[300]! : Colors.green[300]!,
+                    color: themeLightColor ?? Colors.grey,
                     width: 1,
                   ),
                 ),

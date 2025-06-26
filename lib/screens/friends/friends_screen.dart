@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
+import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
+import '../../utils/app_theme.dart';
 import 'add_friends_screen.dart';
 import '../chats/chat_conversation_screen.dart';
 
@@ -174,6 +176,9 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -181,7 +186,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
           'Find',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF6495ED),
+            color: Colors.grey[800],
           ),
         ),
         backgroundColor: Colors.white,
@@ -193,7 +198,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               IconButton(
                 icon: Icon(
                   Icons.notifications,
-                  color: _friendRequests.isNotEmpty ? const Color(0xFF6495ED) : Colors.grey[600],
+                  color: Colors.grey[600],
                 ),
                 onPressed: _showFriendRequests,
               ),
@@ -227,7 +232,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: IconButton(
-              icon: const Icon(Icons.search),
+              icon: Icon(Icons.search, color: Colors.grey[600]),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -266,7 +271,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                       children: [
                         Icon(
                           Icons.person_add,
-                          color: Colors.blue[600],
+                          color: AppTheme.getColorShade(userModel, 600),
                           size: 20,
                         ),
                         const SizedBox(width: 8),
@@ -287,7 +292,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                       ],
                     ),
                   ),
-                  ..._friendRequests.map((request) => _buildFriendRequestCard(request)),
+                  ..._friendRequests.map((request) => _buildFriendRequestCard(request, userModel)),
                 ],
               ),
             ),
@@ -340,7 +345,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                                 icon: const Icon(Icons.search),
                                 label: const Text('Find People'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF6495ED),
+                                  backgroundColor: AppTheme.getPrimaryColor(userModel),
                                   foregroundColor: Colors.white,
                                 ),
                               ),
@@ -355,7 +360,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                       physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: _friends.length,
                       itemBuilder: (context, index) {
-                        return _buildFriendCard(_friends[index]);
+                        return _buildFriendCard(_friends[index], userModel);
                       },
                     ),
             ),
@@ -365,7 +370,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     );
   }
 
-  Widget _buildFriendRequestCard(UserModel user) {
+  Widget _buildFriendRequestCard(UserModel user, UserModel? userModel) {
     return Container(
       margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -379,7 +384,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
           // Profile Picture
           CircleAvatar(
             radius: 24,
-            backgroundColor: Colors.blue[100],
+            backgroundColor: AppTheme.getColorShade(userModel, 100),
             backgroundImage: user.profilePictureUrl != null
                 ? NetworkImage(user.profilePictureUrl!)
                 : null,
@@ -389,7 +394,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                         ? user.displayName[0].toUpperCase()
                         : 'U',
                     style: TextStyle(
-                      color: Colors.blue[600],
+                      color: AppTheme.getColorShade(userModel, 600),
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
@@ -492,7 +497,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     );
   }
 
-  Widget _buildFriendCard(UserModel friend) {
+  Widget _buildFriendCard(UserModel friend, UserModel? userModel) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
@@ -501,7 +506,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
       ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Colors.blue[100],
+          backgroundColor: AppTheme.getColorShade(userModel, 100),
           backgroundImage: friend.profilePictureUrl != null
               ? NetworkImage(friend.profilePictureUrl!)
               : null,
@@ -511,7 +516,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                       ? friend.displayName[0].toUpperCase()
                       : 'F',
                   style: TextStyle(
-                    color: Colors.blue[600],
+                    color: AppTheme.getColorShade(userModel, 600),
                     fontWeight: FontWeight.bold,
                   ),
                 )
@@ -552,7 +557,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
             // Message Button
             Container(
               decoration: BoxDecoration(
-                color: Colors.blue[600],
+                color: AppTheme.getColorShade(userModel, 600),
                 shape: BoxShape.circle,
               ),
               child: IconButton(

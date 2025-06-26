@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import '../../services/auth_service.dart';
+import '../../utils/app_theme.dart';
 import 'share_story_screen.dart';
 import 'text_overlay_notifier.dart';
 
@@ -208,6 +210,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
                       min: 12.0,
                       max: 48.0,
                       divisions: 36,
+                      activeColor: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
                       onChanged: (value) {
                         setDialogState(() => fontSize = value);
                       },
@@ -222,6 +225,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
                   const Text('Bold: '),
                   Switch(
                     value: fontWeight == FontWeight.bold,
+                    activeColor: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
                     onChanged: (value) {
                       setDialogState(() {
                         fontWeight = value ? FontWeight.bold : FontWeight.normal;
@@ -278,11 +282,17 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
                 ref.read(textOverlayProvider.notifier).remove(overlay.id);
                 Navigator.pop(context);
               },
-              child: const Text('Delete'),
+              child: Text(
+                'Delete',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
             ),
             ElevatedButton(
               onPressed: () {
@@ -294,6 +304,10 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
                 ));
                 Navigator.pop(context);
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Save'),
             ),
           ],
@@ -363,10 +377,10 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
     final textOverlays = ref.watch(textOverlayProvider);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.grey[800],
         title: Text(
           'Edit Photo',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
@@ -377,7 +391,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
             child: Text(
               'Next',
               style: GoogleFonts.poppins(
-                color: Colors.blue,
+                color: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -387,7 +401,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
               ),
             )
           : Column(
@@ -398,6 +412,10 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
                   child: Container(
                     width: double.infinity,
                     margin: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: RepaintBoundary(
                       key: _repaintBoundaryKey,
                       child: Stack(
@@ -435,7 +453,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
                 // Editor Panel
                 Container(
                   height: 200,
-                  color: Colors.grey[900],
+                  color: Colors.grey[100],
                   child: _buildEditorPanel(),
                 ),
               ],
@@ -445,12 +463,14 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
 
   Widget _buildModeButton(String mode, String label, IconData icon) {
     final isSelected = _currentMode == mode;
+    final userModel = ref.watch(authServiceProvider).userModel;
+    
     return GestureDetector(
       onTap: () => setState(() => _currentMode = mode),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue : Colors.transparent,
+          color: isSelected ? AppTheme.getPrimaryColor(userModel) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -560,7 +580,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
               Text(
                 'Adjustments',
                 style: GoogleFonts.poppins(
-                  color: Colors.white,
+                  color: Colors.grey[800],
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
                 ),
@@ -640,7 +660,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
           Text(
             label,
             style: GoogleFonts.poppins(
-              color: Colors.white,
+              color: Colors.grey[800],
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -670,7 +690,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
               Text(
                 'Text Overlays',
                 style: GoogleFonts.poppins(
-                  color: Colors.white,
+                  color: Colors.grey[800],
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
                 ),
@@ -694,7 +714,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
                   child: Text(
                     'Tap "Add Text" to add text overlays',
                     style: GoogleFonts.poppins(
-                      color: Colors.grey[500],
+                      color: Colors.grey[600],
                       fontSize: 14,
                     ),
                   ),
@@ -706,12 +726,12 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
                     return ListTile(
                       title: Text(
                         overlay.text,
-                        style: GoogleFonts.poppins(color: Colors.white),
+                        style: GoogleFonts.poppins(color: Colors.grey[800]),
                       ),
                       subtitle: Text(
                         'Tap to edit, drag to move',
                         style: GoogleFonts.poppins(
-                          color: Colors.grey[500],
+                          color: Colors.grey[600],
                           fontSize: 12,
                         ),
                       ),

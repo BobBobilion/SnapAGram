@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
+import '../../services/auth_service.dart';
 import '../../models/chat_model.dart';
+import '../../models/user_model.dart';
+import '../../utils/app_theme.dart';
 import 'chat_conversation_screen.dart';
 
 class ChatsScreen extends ConsumerStatefulWidget {
@@ -59,6 +62,9 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -66,14 +72,14 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
           'Chats',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.blue[600],
+            color: Colors.grey[800],
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
+            icon: Icon(Icons.search, color: Colors.grey[600]),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -84,7 +90,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.group_add),
+            icon: Icon(Icons.group_add, color: Colors.grey[600]),
             onPressed: () {
               _showCreateGroupDialog(context);
             },
@@ -160,7 +166,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
                                     icon: const Icon(Icons.group_add),
                                     label: const Text('Start Chat'),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue[600],
+                                      backgroundColor: AppTheme.getPrimaryColor(userModel),
                                       foregroundColor: Colors.white,
                                     ),
                                   ),
@@ -174,7 +180,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
                           physics: const AlwaysScrollableScrollPhysics(),
                           itemCount: _chats.length,
                           itemBuilder: (context, index) {
-                            return _buildChatItem(_chats[index]);
+                            return _buildChatItem(_chats[index], userModel);
                           },
                         ),
             ),
@@ -184,7 +190,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
     );
   }
 
-  Widget _buildChatItem(ChatModel chat) {
+  Widget _buildChatItem(ChatModel chat, UserModel? userModel) {
     final serviceManager = ref.read(appServiceManagerProvider);
     final currentUserId = serviceManager.currentUserId ?? '';
     final isGroup = chat.type == ChatType.group;
@@ -204,12 +210,12 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
         leading: Stack(
           children: [
             CircleAvatar(
-              backgroundColor: isGroup ? Colors.orange[100] : Colors.blue[100],
+              backgroundColor: isGroup ? Colors.orange[100] : AppTheme.getColorShade(userModel, 100),
               backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
               child: avatarUrl == null
                   ? Icon(
                       isGroup ? Icons.group : Icons.person,
-                      color: isGroup ? Colors.orange[600] : Colors.blue[600],
+                      color: isGroup ? Colors.orange[600] : AppTheme.getPrimaryColor(userModel),
                     )
                   : null,
             ),

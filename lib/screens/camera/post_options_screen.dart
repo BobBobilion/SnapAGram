@@ -1,10 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
+import '../../services/auth_service.dart';
 import '../../models/story_model.dart';
+import '../../utils/app_theme.dart';
 
-class PostOptionsScreen extends StatefulWidget {
+class PostOptionsScreen extends ConsumerStatefulWidget {
   final String imagePath;
 
   const PostOptionsScreen({
@@ -13,12 +16,11 @@ class PostOptionsScreen extends StatefulWidget {
   });
 
   @override
-  State<PostOptionsScreen> createState() => _PostOptionsScreenState();
+  ConsumerState<PostOptionsScreen> createState() => _PostOptionsScreenState();
 }
 
-class _PostOptionsScreenState extends State<PostOptionsScreen> {
+class _PostOptionsScreenState extends ConsumerState<PostOptionsScreen> {
   final TextEditingController _captionController = TextEditingController();
-  final AppServiceManager _serviceManager = AppServiceManager();
   
   String _selectedVisibility = 'public'; // 'public' or 'friends'
   bool _isPosting = false;
@@ -43,7 +45,8 @@ class _PostOptionsScreenState extends State<PostOptionsScreen> {
       setState(() => _uploadStatus = 'Uploading image...');
       
       // Create the story using the service manager - it will handle Firebase Storage upload
-      final storyId = await AppServiceManager().createStory(
+      final serviceManager = ref.read(appServiceManagerProvider);
+      final storyId = await serviceManager.createStory(
         type: StoryType.image,
         visibility: isPublic ? StoryVisibility.public : StoryVisibility.friends,
         mediaUrl: widget.imagePath, // Local file path - will be uploaded automatically
@@ -85,6 +88,9 @@ class _PostOptionsScreenState extends State<PostOptionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -107,7 +113,7 @@ class _PostOptionsScreenState extends State<PostOptionsScreen> {
                 : Text(
                     'Post',
                     style: GoogleFonts.poppins(
-                      color: Colors.blue[600],
+                      color: AppTheme.getColorShade(userModel, 600),
                       fontWeight: FontWeight.w600,
                       fontSize: 16,
                     ),
@@ -196,7 +202,7 @@ class _PostOptionsScreenState extends State<PostOptionsScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.blue[600]!),
+                      borderSide: BorderSide(color: AppTheme.getColorShade(userModel, 600) ?? Colors.blue),
                     ),
                     contentPadding: const EdgeInsets.all(12),
                   ),
@@ -268,7 +274,7 @@ class _PostOptionsScreenState extends State<PostOptionsScreen> {
             child: ElevatedButton(
               onPressed: _isPosting ? null : _postStory,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
+                backgroundColor: AppTheme.getColorShade(userModel, 600),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(

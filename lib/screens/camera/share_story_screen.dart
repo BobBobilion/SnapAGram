@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
+import '../../services/auth_service.dart';
 import '../../models/story_model.dart';
+import '../../utils/app_theme.dart';
 
 class ShareStoryScreen extends ConsumerStatefulWidget {
   final String imagePath;
@@ -86,6 +88,9 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -108,7 +113,7 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
                 : Text(
                     'Post',
                     style: GoogleFonts.poppins(
-                      color: Colors.blue[600],
+                      color: AppTheme.getColorShade(userModel, 600),
                       fontWeight: FontWeight.w600,
                       fontSize: 16,
                     ),
@@ -197,7 +202,7 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.blue[600]!),
+                      borderSide: BorderSide(color: AppTheme.getColorShade(userModel, 600) ?? Colors.blue),
                     ),
                     contentPadding: const EdgeInsets.all(12),
                   ),
@@ -269,7 +274,7 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
             child: ElevatedButton(
               onPressed: _isPosting ? null : _postStory,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
+                backgroundColor: AppTheme.getColorShade(userModel, 600),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(

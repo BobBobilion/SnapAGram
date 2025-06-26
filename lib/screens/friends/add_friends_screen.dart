@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
+import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
+import '../../utils/app_theme.dart';
 
 class AddFriendsScreen extends ConsumerStatefulWidget {
   const AddFriendsScreen({super.key});
@@ -158,6 +160,8 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
   void _showAllUsernames() async {
     try {
       final serviceManager = ref.read(appServiceManagerProvider);
+      final authService = ref.read(authServiceProvider);
+      final userModel = authService.userModel;
       final userIdentifiers = await serviceManager.getAllUserIdentifiers();
       if (mounted) {
         showDialog(
@@ -185,13 +189,13 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
                         final user = userIdentifiers[index];
                         return ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: Colors.blue[100],
+                            backgroundColor: AppTheme.getColorShade(userModel, 100),
                             child: Text(
                               (user['displayName'] ?? '').isNotEmpty 
                                   ? (user['displayName'] ?? '')[0].toUpperCase()
                                   : 'U',
                               style: TextStyle(
-                                color: Colors.blue[600],
+                                color: AppTheme.getColorShade(userModel, 600),
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -240,6 +244,9 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = ref.watch(authServiceProvider);
+    final userModel = authService.userModel;
+    
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -247,13 +254,13 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
           'Add Friends',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.blue[600],
+            color: Colors.grey[800],
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back, color: Colors.grey[600]),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -320,7 +327,7 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.blue[600]!),
+                            borderSide: BorderSide(color: AppTheme.getColorShade(userModel, 600) ?? Colors.blue),
                           ),
                           filled: true,
                           fillColor: Colors.white,
@@ -455,6 +462,8 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
 
   Widget _buildUserCard(UserModel user) {
     final serviceManager = ref.read(appServiceManagerProvider);
+    final authService = ref.read(authServiceProvider);
+    final userModel = authService.userModel;
     final bool isFriend =
         serviceManager.currentUser?.connections.contains(user.uid) ?? false;
     final bool hasSentRequest = _sentInvites.contains(user.uid);
@@ -475,7 +484,7 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
             // Profile Picture
             CircleAvatar(
               radius: 24,
-              backgroundColor: Colors.blue[100],
+              backgroundColor: AppTheme.getColorShade(userModel, 100),
               backgroundImage: user.profilePictureUrl != null
                   ? NetworkImage(user.profilePictureUrl!)
                   : null,
@@ -485,7 +494,7 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
                           ? user.displayName[0].toUpperCase()
                           : 'U',
                       style: TextStyle(
-                        color: Colors.blue[600],
+                        color: AppTheme.getColorShade(userModel, 600),
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -602,7 +611,7 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
                 icon: const Icon(Icons.person_add_alt_1),
                 label: const Text('Add Friend'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[600],
+                  backgroundColor: AppTheme.getColorShade(userModel, 600),
                   foregroundColor: Colors.white,
                 ),
               ),
