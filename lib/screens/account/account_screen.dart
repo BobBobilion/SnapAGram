@@ -359,9 +359,26 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             right: 8,
             child: PopupMenuButton<String>(
               icon: const Icon(Icons.edit),
-              onSelected: (value) {
+              onSelected: (value) async {
                 if (value == 'edit_handle') {
-                  _showEditHandleDialog(context, userModel);
+                  final result = await _showEditHandleDialog(context, userModel);
+                  if (!context.mounted) return;
+
+                  if (result == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Handle updated successfully!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else if (result is Exception) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error updating handle: $result'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
                 }
               },
               itemBuilder: (context) => [
@@ -1015,13 +1032,13 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     );
   }
 
-  void _showEditHandleDialog(BuildContext context, UserModel? userModel) {
+  Future<dynamic> _showEditHandleDialog(BuildContext context, UserModel? userModel) {
     final handleController = TextEditingController(text: userModel?.handle.replaceFirst('@', '') ?? '');
     bool isLoading = false;
     String? validationError;
     bool isCheckingHandle = false;
 
-    showDialog(
+    return showDialog(
       context: context,
       builder: (BuildContext context) {
         return StatefulBuilder(
@@ -1099,71 +1116,87 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 'Change Handle',
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Your handle must be unique and can contain letters, numbers, and hyphens.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: handleController,
-                    decoration: InputDecoration(
-                      labelText: 'Handle',
-                      hintText: 'Enter your new handle (without @)',
-                      prefixText: '@',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Your handle must be unique and can contain letters, numbers, and hyphens.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: Colors.grey[600],
+                        ),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                                                focusedBorder: OutlineInputBorder(
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: handleController,
+                        decoration: InputDecoration(
+                          labelText: 'Handle',
+                          hintText: 'Enter your new handle (without @)',
+                          prefixText: '@',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                             borderSide: BorderSide(color: AppTheme.getPrimaryColor(userModel)),
                           ),
-                      suffixIcon: isCheckingHandle
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: Padding(
-                                padding: EdgeInsets.all(8.0),
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            )
-                          : null,
-                    ),
-                    enabled: !isLoading,
-                    onChanged: (value) {
-                      debouncedValidate(value);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        validationError != null ? Icons.error_outline : Icons.check_circle_outline,
-                        size: 16,
-                        color: validationError != null ? Colors.red[400] : Colors.grey[500],
+                          suffixIcon: isCheckingHandle
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: Padding(
+                                    padding: EdgeInsets.all(8.0),
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                )
+                              : null,
+                        ),
+                        enabled: !isLoading,
+                        onChanged: (value) {
+                          // Replace spaces with hyphens
+                          final processedValue = value.replaceAll(' ', '-');
+                          if (processedValue != value) {
+                            handleController.value = TextEditingValue(
+                              text: processedValue,
+                              selection: TextSelection.collapsed(offset: processedValue.length),
+                            );
+                          }
+                          debouncedValidate(processedValue);
+                        },
                       ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          validationError ?? 'Handle is available',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
+                      const SizedBox(height: 6),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            validationError != null ? Icons.error_outline : Icons.check_circle_outline,
+                            size: 14,
                             color: validationError != null ? Colors.red[400] : Colors.grey[500],
                           ),
-                        ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              validationError ?? 'Handle is available',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: validationError != null ? Colors.red[400] : Colors.grey[500],
+                              ),
+                              softWrap: true,
+                              maxLines: null,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -1174,8 +1207,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   ),
                 ),
                 TextButton(
-                  onPressed: (isLoading || validationError != null || isCheckingHandle) 
-                      ? null 
+                  onPressed: (isLoading || validationError != null || isCheckingHandle)
+                      ? null
                       : () async {
                           final newHandle = handleController.text.trim();
                           if (newHandle.isEmpty) return;
@@ -1185,29 +1218,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                           try {
                             final authService = ref.read(authServiceProvider);
                             await authService.updateHandle(newHandle);
-                            
+
                             if (context.mounted) {
-                              Navigator.of(context).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Handle updated successfully!'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                              Navigator.of(context).pop(true);
                             }
                           } catch (e) {
                             print('Error updating handle: $e'); // Debug log
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error updating handle: $e'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          } finally {
-                            if (context.mounted) {
-                              setState(() => isLoading = false);
+                              Navigator.of(context).pop(e);
                             }
                           }
                         },

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -66,7 +67,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
     }
   }
 
-  void _applyFilter(String filterName) {
+  void _applyFilter(String filterName) async {
     if (_originalImage == null) return;
     
     setState(() {
@@ -74,45 +75,37 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
       _isLoading = true;
     });
 
-    Future.microtask(() {
-      img.Image filtered = img.copyResize(_originalImage!, width: 1080);
-      
-      switch (filterName) {
-        case 'sepia':
-          filtered = img.sepia(filtered);
-          break;
-        case 'grayscale':
-          filtered = img.grayscale(filtered);
-          break;
-        case 'vintage':
-          filtered = _applyVintageFilter(filtered);
-          break;
-        case 'cool':
-          filtered = _applyCoolFilter(filtered);
-          break;
-        case 'warm':
-          filtered = _applyWarmFilter(filtered);
-          break;
-        case 'high_contrast':
-          filtered = img.contrast(filtered, contrast: 1.5);
-          break;
-        case 'soft':
-          filtered = img.gaussianBlur(filtered, radius: 1);
-          break;
-        case 'none':
-        default:
-          // No filter applied
-          break;
-      }
-      
-      // Apply adjustments on top of filter
-      filtered = _applyAdjustments(filtered);
+    try {
+      final params = ImageProcessingParams(
+        originalImageBytes: Uint8List.fromList(img.encodePng(_originalImage!)),
+        filterName: filterName,
+        brightness: _brightness,
+        contrast: _contrast,
+        saturation: _saturation,
+        blur: _blur,
+      );
+
+      final processedBytes = await compute(_processImageInBackground, params);
+      final processedImage = img.decodeImage(processedBytes);
       
       setState(() {
-        _editedImage = filtered;
+        _editedImage = processedImage;
         _isLoading = false;
       });
-    });
+    } catch (e) {
+      debugPrint('Error applying filter: $e');
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error applying filter: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   img.Image _applyVintageFilter(img.Image image) {
@@ -136,29 +129,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
     );
   }
 
-  img.Image _applyAdjustments(img.Image image) {
-    // Apply brightness
-    if (_brightness != 0.0) {
-      image = img.adjustColor(image, brightness: _brightness);
-    }
-    
-    // Apply contrast
-    if (_contrast != 1.0) {
-      image = img.contrast(image, contrast: _contrast);
-    }
-    
-    // Apply saturation adjustment
-    if (_saturation != 1.0) {
-      image = img.adjustColor(image, saturation: _saturation);
-    }
-    
-    // Apply blur
-    if (_blur > 0.0) {
-      image = img.gaussianBlur(image, radius: _blur.round());
-    }
-    
-    return image;
-  }
+  
 
   void _addTextOverlay() {
     ref.read(textOverlayProvider.notifier).add(TextOverlay(
@@ -808,4 +779,95 @@ class _DraggableTextOverlayState extends ConsumerState<DraggableTextOverlay> {
       ),
     );
   }
+}
+
+// Data class to pass parameters to the isolate
+class ImageProcessingParams {
+  final Uint8List originalImageBytes;
+  final String filterName;
+  final double brightness;
+  final double contrast;
+  final double saturation;
+  final double blur;
+
+  ImageProcessingParams({
+    required this.originalImageBytes,
+    required this.filterName,
+    required this.brightness,
+    required this.contrast,
+    required this.saturation,
+    required this.blur,
+  });
+}
+
+// Top-level function for image processing in an isolate
+Future<Uint8List> _processImageInBackground(ImageProcessingParams params) async {
+  img.Image? image = img.decodeImage(params.originalImageBytes);
+  if (image == null) {
+    throw Exception('Failed to decode image in isolate');
+  }
+
+  // Resize for consistent processing
+  image = img.copyResize(image, width: 1080);
+
+  // Apply filter
+  switch (params.filterName) {
+    case 'sepia':
+      image = img.sepia(image);
+      break;
+    case 'grayscale':
+      image = img.grayscale(image);
+      break;
+    case 'vintage':
+      image = _applyVintageFilter(image);
+      break;
+    case 'cool':
+      image = _applyCoolFilter(image);
+      break;
+    case 'warm':
+      image = _applyWarmFilter(image);
+      break;
+    case 'high_contrast':
+      image = img.contrast(image, contrast: 1.5);
+      break;
+    case 'soft':
+      image = img.gaussianBlur(image, radius: 1);
+      break;
+    case 'none':
+    default:
+      // No filter applied
+      break;
+  }
+
+  // Apply adjustments
+  if (params.brightness != 0.0) {
+    final normalizedBrightness = params.brightness / 100.0;
+    image = img.adjustColor(image, brightness: normalizedBrightness);
+  }
+  if (params.contrast != 1.0) {
+    image = img.contrast(image, contrast: params.contrast);
+  }
+  if (params.saturation != 1.0) {
+    image = img.adjustColor(image, saturation: params.saturation);
+  }
+  if (params.blur > 0.0) {
+    image = img.gaussianBlur(image, radius: params.blur.round());
+  }
+
+  return Uint8List.fromList(img.encodePng(image));
+}
+
+// Helper functions for filters (must be top-level for isolates)
+img.Image _applyVintageFilter(img.Image image) {
+  image = img.sepia(image);
+  image = img.adjustColor(image, saturation: 0.7, contrast: 1.2);
+  return image;
+}
+
+img.Image _applyCoolFilter(img.Image image) {
+  return img.adjustColor(image, contrast: 1.1);
+}
+
+img.Image _applyWarmFilter(img.Image image) {
+  return img.adjustColor(image, saturation: 1.1);
 } 

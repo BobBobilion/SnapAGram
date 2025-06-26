@@ -134,7 +134,7 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    'Invite sent to @${user.handle}',
+                    'Invite sent to ${user.handle.startsWith('@') ? user.handle : '@${user.handle}'}',
                     style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
