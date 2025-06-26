@@ -94,7 +94,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     for (final message in _messages) {
       final timeElapsed = now.difference(message.createdAt).inSeconds;
       // Only consider message expired if it's not already being deleted
-      if (timeElapsed >= 30 && !_deletingMessages.contains(message.id)) {
+      if (timeElapsed >= 86400 && !_deletingMessages.contains(message.id)) { // 24 hours
         expiredMessages.add(message);
       }
     }
@@ -140,7 +140,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     
     for (final message in messages) {
       final timeElapsed = now.difference(message.createdAt).inSeconds;
-      if (timeElapsed >= 30) {
+      if (timeElapsed >= 86400) { // 24 hours
         // Only add to expired list if not already being deleted
         if (!_deletingMessages.contains(message.id)) {
           expiredMessages.add(message);
@@ -167,7 +167,93 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
   int _getMessageTimeLeft(MessageModel message) {
     final now = DateTime.now();
     final timeElapsed = now.difference(message.createdAt).inSeconds;
-    return 30 - timeElapsed;
+    return 86400 - timeElapsed; // 24 hours
+  }
+
+  String _formatTimeLeft(int seconds) {
+    if (seconds <= 0) return 'Expired';
+    
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    final secs = seconds % 60;
+    
+    if (hours > 0) {
+      return '${hours}h';
+    } else if (minutes > 0) {
+      return '${minutes}m ${secs}s';
+    } else {
+      return '${secs}s';
+    }
+  }
+
+  Widget _buildCountdownTimer(int timeLeft, bool isCurrentUser) {
+    if (timeLeft <= 0) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Colors.red.withOpacity(0.7),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'Deleting...',
+            style: GoogleFonts.poppins(
+              fontSize: 9,
+              color: Colors.red.withOpacity(0.7),
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Calculate progress (0.0 to 1.0)
+    final progress = (86400 - timeLeft) / 86400; // Total 24 hours = 86400 seconds
+    final isWarning = timeLeft <= 3600; // Warning when 1 hour left
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            value: progress,
+            strokeWidth: 1.5,
+            backgroundColor: isCurrentUser 
+                ? Colors.white.withOpacity(0.3) 
+                : Colors.grey[300],
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isWarning
+                  ? Colors.red.withOpacity(0.8)
+                  : isCurrentUser 
+                      ? Colors.white.withOpacity(0.7) 
+                      : Colors.grey[500]!,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          _formatTimeLeft(timeLeft),
+          style: GoogleFonts.poppins(
+            fontSize: 9,
+            color: isWarning
+                ? Colors.red.withOpacity(0.7)
+                : isCurrentUser 
+                    ? Colors.white.withOpacity(0.5) 
+                    : Colors.grey[400],
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _loadChatAndMessages() async {
@@ -480,12 +566,12 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                             controller: _scrollController,
                             reverse: true,
                             padding: const EdgeInsets.all(16),
-                            itemCount: _messages.length,
+                            itemCount: _messages.where((msg) => !msg.isDeleted).length,
                             itemBuilder: (context, index) {
-                              final message = _messages[index];
-                              final nextMessage = (index > 0) ? _messages[index - 1] : null;
-                              final bool showAvatar = nextMessage == null || nextMessage.senderId != message.senderId;
-                              return _buildMessageItem(message, showAvatar, userModel);
+                              final visibleMessages = _messages.where((msg) => !msg.isDeleted).toList();
+                              final message = visibleMessages[index];
+                              final bool isBottomMessage = index == 0; // Most recent message (bottom of chat)
+                              return _buildMessageItem(message, isBottomMessage, userModel);
                             },
                           ),
               ],
@@ -577,49 +663,30 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     );
   }
 
-  Widget _buildMessageItem(MessageModel message, bool showAvatar, userModel) {
+  Widget _buildMessageItem(MessageModel message, bool isBottomMessage, userModel) {
     final isCurrentUser = message.senderId == ref.read(appServiceManagerProvider).currentUserId;
     final isDeleted = message.isDeleted;
     final timeLeft = _getMessageTimeLeft(message);
     
     return Padding(
-      padding: EdgeInsets.only(bottom: showAvatar ? 12 : 4),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         mainAxisAlignment: isCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!isCurrentUser) ...[
-            if (showAvatar)
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AppTheme.getColorShade(userModel, 100),
-                backgroundImage: message.senderProfilePicture != null
-                    ? NetworkImage(message.senderProfilePicture!)
-                    : null,
-                child: message.senderProfilePicture == null
-                    ? Text(
-                        message.senderUsername.isNotEmpty 
-                            ? message.senderUsername[0].toUpperCase()
-                            : 'U',
-                        style: TextStyle(
-                          color: AppTheme.getColorShade(userModel, 600),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      )
-                    : null,
-              )
-            else
-              const SizedBox(width: 40), // Keep the space for alignment
-            const SizedBox(width: 8),
-          ],
-          
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 color: isCurrentUser ? AppTheme.getColorShade(userModel, 600) : Colors.white,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: isBottomMessage 
+                    ? BorderRadius.only(
+                        topLeft: const Radius.circular(18),
+                        topRight: const Radius.circular(18),
+                        bottomLeft: isCurrentUser ? const Radius.circular(18) : const Radius.circular(4),
+                        bottomRight: isCurrentUser ? const Radius.circular(4) : const Radius.circular(18),
+                      )
+                    : BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.05),
@@ -629,9 +696,9 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                 ],
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: isCurrentUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
-                  if (!isCurrentUser && showAvatar) ...[
+                  if (!isCurrentUser && isBottomMessage) ...[
                     Text(
                       _getSenderDisplayName(message),
                       style: GoogleFonts.poppins(
@@ -644,46 +711,55 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                   ],
                   
                   // Message content
-                  if (isDeleted)
-                    Text(
-                      'This message was deleted',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: isCurrentUser ? Colors.white : Colors.grey[800],
-                        fontStyle: FontStyle.italic,
-                      ),
-                    )
-                  else if (message.type == MessageType.image)
+                  if (message.type == MessageType.image)
                     GestureDetector(
                       onTap: () {
                         // Show full-screen image viewer
                         showDialog(
                           context: context,
-                          builder: (context) => Dialog(
-                            backgroundColor: Colors.transparent,
-                            child: Stack(
-                              children: [
-                                Center(
-                                  child: InteractiveViewer(
-                                    child: Image.network(
-                                      message.content,
-                                      fit: BoxFit.contain,
+                          builder: (context) => GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Dialog(
+                              backgroundColor: Colors.transparent,
+                              insetPadding: EdgeInsets.zero,
+                              child: Container(
+                                width: double.infinity,
+                                height: double.infinity,
+                                color: Colors.black.withOpacity(0.8),
+                                child: Stack(
+                                  children: [
+                                    Center(
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          maxWidth: MediaQuery.of(context).size.width * 0.9,
+                                          maxHeight: MediaQuery.of(context).size.height * 0.8,
+                                        ),
+                                        child: GestureDetector(
+                                          onTap: () {}, // Prevent tap from bubbling up
+                                          child: InteractiveViewer(
+                                            child: Image.network(
+                                              message.content,
+                                              fit: BoxFit.contain,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 40,
-                                  right: 20,
-                                  child: IconButton(
-                                    icon: const Icon(
-                                      Icons.close,
-                                      color: Colors.white,
-                                      size: 30,
+                                    Positioned(
+                                      top: 40,
+                                      right: 20,
+                                      child: IconButton(
+                                        icon: const Icon(
+                                          Icons.close,
+                                          color: Colors.white,
+                                          size: 30,
+                                        ),
+                                        onPressed: () => Navigator.pop(context),
+                                      ),
                                     ),
-                                    onPressed: () => Navigator.pop(context),
-                                  ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         );
@@ -785,67 +861,11 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                   const SizedBox(height: 2),
                   
                   // Countdown timer
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        timeLeft <= 5 
-                            ? Icons.warning_amber 
-                            : Icons.timer,
-                        size: 10,
-                        color: timeLeft <= 5
-                            ? Colors.red.withOpacity(0.7)
-                            : isCurrentUser 
-                                ? Colors.white.withOpacity(0.5) 
-                                : Colors.grey[400],
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        timeLeft <= 0 
-                            ? 'Deleting...'
-                            : 'Disappears in ${timeLeft}s',
-                        style: GoogleFonts.poppins(
-                          fontSize: 9,
-                          color: timeLeft <= 5
-                              ? Colors.red.withOpacity(0.7)
-                              : isCurrentUser 
-                                  ? Colors.white.withOpacity(0.5) 
-                                  : Colors.grey[400],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  ),
+                  _buildCountdownTimer(timeLeft, isCurrentUser),
                 ],
               ),
             ),
           ),
-          
-          if (isCurrentUser) ...[
-            const SizedBox(width: 8),
-            if (showAvatar)
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AppTheme.getColorShade(userModel, 100),
-                backgroundImage: ref.read(appServiceManagerProvider).currentUser?.profilePictureUrl != null
-                    ? NetworkImage(ref.read(appServiceManagerProvider).currentUser!.profilePictureUrl!)
-                    : null,
-                child: ref.read(appServiceManagerProvider).currentUser?.profilePictureUrl == null
-                    ? Text(
-                        ref.read(appServiceManagerProvider).currentUser?.displayName.isNotEmpty == true
-                            ? ref.read(appServiceManagerProvider).currentUser!.displayName[0].toUpperCase()
-                            : 'U',
-                        style: TextStyle(
-                          color: AppTheme.getColorShade(userModel, 600),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      )
-                    : null,
-              )
-            else
-              const SizedBox(width: 40), // Keep the space for alignment
-          ],
         ],
       ),
     );
@@ -864,4 +884,42 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
   }
-} 
+}
+
+class MessageTailPainter extends CustomPainter {
+  final bool isCurrentUser;
+  final Color color;
+
+  MessageTailPainter({
+    required this.isCurrentUser,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    
+    if (isCurrentUser) {
+      // Right tail for current user
+      path.moveTo(size.width - 8, size.height);
+      path.lineTo(size.width + 8, size.height + 8);
+      path.lineTo(size.width - 8, size.height + 8);
+      path.close();
+    } else {
+      // Left tail for other user
+      path.moveTo(8, size.height);
+      path.lineTo(-8, size.height + 8);
+      path.lineTo(8, size.height + 8);
+      path.close();
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
