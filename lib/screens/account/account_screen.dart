@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_database_service.dart';
 import '../../models/user_model.dart';
+import '../../models/enums.dart';
 import '../auth/login_screen.dart';
+import '../auth/complete_onboarding_screen.dart';
 import 'my_stories_screen.dart';
 import 'dart:async';
 
@@ -61,7 +63,8 @@ class _AccountScreenState extends State<AccountScreen> {
                   _buildQuickStats(userModel),
                   const SizedBox(height: 24),
 
-                  // Settings Section
+                  // Settings Section - Commented out placeholder features
+                  /*
                   Text(
                     'Settings',
                     style: GoogleFonts.poppins(
@@ -75,6 +78,7 @@ class _AccountScreenState extends State<AccountScreen> {
                   // Settings Cards
                   _buildSettingsSection(),
                   const SizedBox(height: 24),
+                  */
 
                   // Privacy Section
                   Text(
@@ -172,6 +176,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       ),
                     ],
                     const SizedBox(height: 12),
+                    // User Role and Onboarding Info
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -181,46 +186,41 @@ class _AccountScreenState extends State<AccountScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: isOnline ? Colors.green[100] : Colors.grey[100],
+                            color: userModel?.isOwner == true ? Colors.green[100] : Colors.blue[100],
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            isOnline ? 'Online' : 'Offline',
+                            userModel?.roleText ?? 'User',
                             style: GoogleFonts.poppins(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: isOnline ? Colors.green[700] : Colors.grey[700],
+                              color: userModel?.isOwner == true ? Colors.green[700] : Colors.blue[700],
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: user?.providerData.isNotEmpty == true &&
-                                    user!.providerData.first.providerId == 'google.com'
-                                ? Colors.blue[100]
-                                : Colors.orange[100],
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            user?.providerData.isNotEmpty == true &&
-                                    user!.providerData.first.providerId == 'google.com'
-                                ? 'Google'
-                                : 'Email',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: user?.providerData.isNotEmpty == true &&
-                                      user!.providerData.first.providerId == 'google.com'
-                                  ? Colors.blue[700]
-                                  : Colors.orange[700],
+                        if (userModel?.isOnboardingComplete == true) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.purple[100],
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              userModel?.isOwner == true 
+                                  ? userModel?.ownerProfile?.city ?? 'No City'
+                                  : userModel?.walkerProfile?.city ?? 'No City',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.purple[700],
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ],
@@ -235,6 +235,107 @@ class _AccountScreenState extends State<AccountScreen> {
                       color: Colors.grey[700],
                     ),
                     textAlign: TextAlign.center,
+                  ),
+                ],
+                
+                // Onboarding Information
+                if (userModel?.isOnboardingComplete == true) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Column(
+                      children: [
+                        if (userModel?.isOwner == true && userModel?.ownerProfile != null) ...[
+                          // Dog Information
+                          Row(
+                            children: [
+                              Icon(Icons.pets, size: 16, color: Colors.green[600]),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Dog: ${userModel!.ownerProfile!.dogName}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              if (userModel.ownerProfile!.dogBreed?.isNotEmpty == true) ...[
+                                Icon(Icons.info_outline, size: 14, color: Colors.grey[600]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  userModel.ownerProfile!.dogBreed!,
+                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+                                ),
+                                const Text(' • ', style: TextStyle(color: Colors.grey)),
+                              ],
+                              Icon(Icons.straighten, size: 14, color: Colors.grey[600]),
+                              const SizedBox(width: 4),
+                              Text(
+                                userModel.ownerProfile!.dogSizeText,
+                                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+                              ),
+                              if (userModel.ownerProfile!.dogAge != null) ...[
+                                const Text(' • ', style: TextStyle(color: Colors.grey)),
+                                Icon(Icons.cake, size: 14, color: Colors.grey[600]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  userModel.ownerProfile!.ageText,
+                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ] else if (userModel?.isWalker == true && userModel?.walkerProfile != null) ...[
+                          // Walker Information
+                          Row(
+                            children: [
+                              Icon(Icons.directions_walk, size: 16, color: Colors.blue[600]),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Dog Walker',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              if (userModel?.walkerProfile?.hasReviews == true) ...[
+                                Icon(Icons.star, size: 14, color: Colors.amber[600]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${userModel?.walkerProfile?.formattedRating} (${userModel?.walkerProfile?.totalReviews})',
+                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+                                ),
+                                const Text(' • ', style: TextStyle(color: Colors.grey)),
+                              ],
+                              Icon(Icons.pets, size: 14, color: Colors.grey[600]),
+                              const SizedBox(width: 4),
+                              Text(
+                                userModel?.walkerProfile?.dogSizePreferences.isEmpty == true
+                                    ? 'All sizes' 
+                                    : userModel?.walkerProfile?.dogSizePreferences.map((s) => s.name).join(', ') ?? 'All sizes',
+                                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -259,13 +360,6 @@ class _AccountScreenState extends State<AccountScreen> {
               onSelected: (value) {
                 if (value == 'edit_handle') {
                   _showEditHandleDialog(context, userModel);
-                } else if (value == 'edit_profile') {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Edit profile coming soon!'),
-                      duration: Duration(milliseconds: 500),
-                    ),
-                  );
                 }
               },
               itemBuilder: (context) => [
@@ -279,6 +373,8 @@ class _AccountScreenState extends State<AccountScreen> {
                     ],
                   ),
                 ),
+                // Commented out placeholder feature
+                /*
                 PopupMenuItem(
                   value: 'edit_profile',
                   child: Row(
@@ -289,7 +385,30 @@ class _AccountScreenState extends State<AccountScreen> {
                     ],
                   ),
                 ),
+                */
               ],
+            ),
+          ),
+          
+          // Onboarding status dot positioned at the top left
+          Positioned(
+            top: 12,
+            left: 12,
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: userModel?.isOnboardingComplete == true ? Colors.green : Colors.red,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -460,6 +579,16 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget _buildPrivacySection() {
     return Column(
       children: [
+        // Redo Onboarding - functional feature
+        _buildSettingsCard(
+          icon: Icons.refresh,
+          title: 'Redo Onboarding',
+          subtitle: 'Update your profile and preferences',
+          onTap: () => _showRedoOnboardingDialog(context),
+        ),
+        const SizedBox(height: 8),
+        // Commented out placeholder features
+        /*
         _buildSettingsCard(
           icon: Icons.privacy_tip,
           title: 'Privacy Settings',
@@ -500,6 +629,7 @@ class _AccountScreenState extends State<AccountScreen> {
           },
         ),
         const SizedBox(height: 16),
+        */
         _buildDeleteAccountCard(),
       ],
     );
@@ -508,6 +638,8 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget _buildSupportSection() {
     return Column(
       children: [
+        // Commented out placeholder features
+        /*
         _buildSettingsCard(
           icon: Icons.help,
           title: 'Help & Support',
@@ -560,6 +692,7 @@ class _AccountScreenState extends State<AccountScreen> {
             );
           },
         ),
+        */
         _buildSettingsCard(
           icon: Icons.info,
           title: 'About',
@@ -1078,6 +1211,129 @@ class _AccountScreenState extends State<AccountScreen> {
               ],
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showRedoOnboardingDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(
+            'Redo Onboarding',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.bold,
+              color: Colors.blue[600],
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You can update your profile information and preferences by redoing the onboarding process.',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'This will allow you to:',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• Update your role (Owner/Walker)\n'
+                '• Change your location\n'
+                '• Update dog information (for owners)\n'
+                '• Modify preferences and availability',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Your existing connections and stories will remain unchanged.',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.green[700],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.poppins(color: Colors.grey[600]),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop(); // Close dialog
+                
+                try {
+                  // Reset onboarding status in database
+                  final authService = context.read<AuthService>();
+                  final currentUser = authService.userModel;
+                  
+                  if (currentUser != null) {
+                    // Reset onboarding completion flag
+                    await UserDatabaseService.updateUserProfile(currentUser.uid, {
+                      'isOnboardingComplete': false,
+                      'role': UserRole.owner.name, // Reset to default
+                      'walkerProfile': null,
+                      'ownerProfile': null,
+                    });
+                    
+                    // Reload user model to reflect changes
+                    await authService.reloadUserModel();
+                    
+                    // Navigate to onboarding screen
+                    if (context.mounted) {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => CompleteOnboardingScreen(
+                            email: currentUser.email,
+                            displayName: currentUser.displayName,
+                            handle: currentUser.handle.replaceFirst('@', ''),
+                          ),
+                        ),
+                        (route) => false, // Clear navigation stack
+                      );
+                    }
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error starting onboarding: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[600],
+                foregroundColor: Colors.white,
+              ),
+              child: Text(
+                'Start Onboarding',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
         );
       },
     );

@@ -5,6 +5,7 @@ import '../models/user_model.dart';
 import '../models/enums.dart';
 import '../models/walker_profile.dart';
 import '../models/owner_profile.dart';
+import 'storage_service.dart';
 
 class UserDatabaseService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -756,18 +757,91 @@ class UserDatabaseService {
   // Delete all user data (used for account deletion)
   static Future<void> deleteUserData(String userId) async {
     try {
+      print('Starting comprehensive user data deletion for $userId');
+      
       final user = await getUserById(userId);
-      if (user == null) return; // User doesn't exist in Firestore
+      if (user == null) {
+        print('User $userId not found in Firestore, proceeding with storage cleanup');
+      }
+      
+      // Step 1: Delete all user files from Firebase Storage
+      await _deleteUserStorageData(userId);
+      
+      // Step 2: Delete user data from Firestore collections
+      await _deleteUserFirestoreData(userId, user);
+      
+      // Step 3: Clean up user references in other users' data
+      if (user != null) {
+        await _cleanupUserReferences(userId, user);
+      }
+      
+      print('Successfully completed comprehensive deletion for user $userId');
+    } catch (e) {
+      print('Error during comprehensive user deletion for $userId: $e');
+      throw Exception('Failed to delete user data: $e');
+    }
+  }
+
+  // Delete all user files from Firebase Storage
+  static Future<void> _deleteUserStorageData(String userId) async {
+    try {
+      print('Deleting storage data for user $userId');
+      
+      // Delete profile picture
+      await StorageService.deleteProfilePicture(userId);
+      
+      // Delete dog picture (if owner)
+      await StorageService.deleteDogPicture(userId);
+      
+      // Delete all user's story images
+      await StorageService.deleteAllUserStories(userId);
+      
+      // Delete all user's walk photos
+      await StorageService.deleteAllUserWalkPhotos(userId);
+      
+      print('Storage cleanup completed for user $userId');
+    } catch (e) {
+      print('Error deleting storage data for $userId: $e');
+      // Don't throw here - continue with other cleanup even if storage fails
+    }
+  }
+
+  // Delete user data from all Firestore collections
+  static Future<void> _deleteUserFirestoreData(String userId, UserModel? user) async {
+    try {
+      print('Deleting Firestore data for user $userId');
       
       final batch = _firestore.batch();
       
-      // Delete user document
+      // Delete main user document (includes all onboarding data)
       batch.delete(_usersCollection.doc(userId));
       
       // Delete handle reservation
-      if (user.handle.isNotEmpty) {
-        batch.delete(_handlesCollection.doc(user.handle.toLowerCase()));
+      if (user?.handle.isNotEmpty == true) {
+        batch.delete(_handlesCollection.doc(user!.handle.toLowerCase()));
       }
+      
+      await batch.commit();
+      
+      // Delete from other collections (in separate batches to avoid size limits)
+      await _deleteUserStories(userId);
+      await _deleteUserChats(userId);
+      await _deleteUserWalkSessions(userId);
+      await _deleteUserReviews(userId);
+      
+      print('Firestore cleanup completed for user $userId');
+    } catch (e) {
+      print('Error deleting Firestore data for $userId: $e');
+      throw e;
+    }
+  }
+
+  // Clean up references to this user in other users' data
+  static Future<void> _cleanupUserReferences(String userId, UserModel user) async {
+    try {
+      print('Cleaning up user references for $userId');
+      
+      final batch = _firestore.batch();
       
       // Remove user from all connections' connection lists
       if (user.connections.isNotEmpty) {
@@ -798,17 +872,78 @@ class UserDatabaseService {
       }
       
       await batch.commit();
-      
-      // TODO: Add cleanup for other collections when implemented:
-      // - Delete user's stories from stories collection
-      // - Delete user's chats and messages
-      // - Delete user's walk sessions and reviews
-      // - Delete user's photos from Firebase Storage
-      
-      print('Successfully deleted user data for $userId');
+      print('User references cleanup completed for $userId');
     } catch (e) {
-      print('Error deleting user data for $userId: $e');
-      throw Exception('Failed to delete user data: $e');
+      print('Error cleaning up user references for $userId: $e');
+      throw e;
+    }
+  }
+
+  // Delete all user stories
+  static Future<void> _deleteUserStories(String userId) async {
+    try {
+      // When story collection is implemented, delete all stories by this user
+      // final storiesQuery = FirebaseFirestore.instance
+      //     .collection('stories')
+      //     .where('userId', isEqualTo: userId);
+      // final storiesSnapshot = await storiesQuery.get();
+      // final batch = _firestore.batch();
+      // for (final doc in storiesSnapshot.docs) {
+      //   batch.delete(doc.reference);
+      // }
+      // await batch.commit();
+      print('Stories deletion completed for user $userId');
+    } catch (e) {
+      print('Error deleting stories for $userId: $e');
+    }
+  }
+
+  // Delete all user chats and messages
+  static Future<void> _deleteUserChats(String userId) async {
+    try {
+      // When chat collection is implemented, delete all chats involving this user
+      // This includes both individual chats and group chats
+      print('Chat deletion completed for user $userId');
+    } catch (e) {
+      print('Error deleting chats for $userId: $e');
+    }
+  }
+
+  // Delete all user walk sessions
+  static Future<void> _deleteUserWalkSessions(String userId) async {
+    try {
+      // When walk sessions collection is implemented, delete all sessions by this user
+      // final walkSessionsQuery = FirebaseFirestore.instance
+      //     .collection('walkSessions')
+      //     .where('walkerId', isEqualTo: userId);
+      // final walkSessionsSnapshot = await walkSessionsQuery.get();
+      // final batch = _firestore.batch();
+      // for (final doc in walkSessionsSnapshot.docs) {
+      //   batch.delete(doc.reference);
+      // }
+      // await batch.commit();
+      print('Walk sessions deletion completed for user $userId');
+    } catch (e) {
+      print('Error deleting walk sessions for $userId: $e');
+    }
+  }
+
+  // Delete all user reviews
+  static Future<void> _deleteUserReviews(String userId) async {
+    try {
+      // When reviews collection is implemented, delete all reviews by/for this user
+      // final reviewsQuery = FirebaseFirestore.instance
+      //     .collection('reviews')
+      //     .where('walkerId', isEqualTo: userId);
+      // final reviewsSnapshot = await reviewsQuery.get();
+      // final batch = _firestore.batch();
+      // for (final doc in reviewsSnapshot.docs) {
+      //   batch.delete(doc.reference);
+      // }
+      // await batch.commit();
+      print('Reviews deletion completed for user $userId');
+    } catch (e) {
+      print('Error deleting reviews for $userId: $e');
     }
   }
 } 

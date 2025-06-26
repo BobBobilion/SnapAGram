@@ -12,6 +12,7 @@ import '../../models/owner_profile.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_database_service.dart';
 import '../../services/storage_service.dart';
+import '../../widgets/address_autocomplete_field.dart';
 import '../home/home_screen.dart';
 
 class CompleteOnboardingScreen extends StatefulWidget {
@@ -1064,18 +1065,21 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
           ),
           const SizedBox(height: 32),
           
-          // City field
-          TextFormField(
+          // City field with autocomplete
+          AddressAutocompleteField(
             controller: _cityController,
-            decoration: InputDecoration(
-              labelText: 'City',
-              hintText: 'Enter your city',
-              prefixIcon: const Icon(Icons.location_on_outlined),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
+            labelText: 'City',
+            hintText: 'Enter your city',
+            prefixIcon: Icons.location_on_outlined,
             validator: (value) => value?.isEmpty ?? true ? 'City is required' : null,
+            onAddressSelected: (address) {
+              // Trigger state update to enable the next button
+              setState(() {
+                // The controller text is already set by the widget,
+                // we just need to trigger a rebuild to update the UI
+              });
+              print('Selected address: $address');
+            },
           ),
           const SizedBox(height: 24),
           

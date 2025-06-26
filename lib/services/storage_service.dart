@@ -311,4 +311,130 @@ class StorageService {
       return 0;
     }
   }
+
+  // ================== DELETION METHODS FOR ACCOUNT CLEANUP ==================
+
+  /// Delete user's profile picture
+  static Future<void> deleteProfilePicture(String userId) async {
+    try {
+      final String fileName = 'profile_$userId.jpg';
+      final String filePath = 'profiles/$fileName';
+      final Reference ref = _storage.ref().child(filePath);
+      await ref.delete();
+      print('StorageService: Profile picture deleted successfully for user $userId');
+    } catch (e) {
+      print('StorageService: Error deleting profile picture for $userId - $e');
+      // Don't throw - continue with other deletions
+    }
+  }
+
+  /// Delete user's dog picture
+  static Future<void> deleteDogPicture(String userId) async {
+    try {
+      final String fileName = 'dog_$userId.jpg';
+      final String filePath = 'dogs/$fileName';
+      final Reference ref = _storage.ref().child(filePath);
+      await ref.delete();
+      print('StorageService: Dog picture deleted successfully for user $userId');
+    } catch (e) {
+      print('StorageService: Error deleting dog picture for $userId - $e');
+      // Don't throw - continue with other deletions
+    }
+  }
+
+  /// Delete all user's story images
+  static Future<void> deleteAllUserStories(String userId) async {
+    try {
+      final Reference storiesRef = _storage.ref().child('stories/$userId');
+      final ListResult result = await storiesRef.listAll();
+      
+      // Delete all items in the user's stories folder
+      for (Reference ref in result.items) {
+        try {
+          await ref.delete();
+          print('StorageService: Deleted story file ${ref.name}');
+        } catch (e) {
+          print('StorageService: Error deleting story file ${ref.name} - $e');
+        }
+      }
+      
+      print('StorageService: All stories deleted for user $userId');
+    } catch (e) {
+      print('StorageService: Error deleting stories for $userId - $e');
+      // Don't throw - continue with other deletions
+    }
+  }
+
+  /// Delete all user's walk photos
+  static Future<void> deleteAllUserWalkPhotos(String userId) async {
+    try {
+      final Reference walkPhotosRef = _storage.ref().child('walk_photos/$userId');
+      final ListResult result = await walkPhotosRef.listAll();
+      
+      // Delete all items in the user's walk photos folder
+      for (Reference ref in result.items) {
+        try {
+          await ref.delete();
+          print('StorageService: Deleted walk photo ${ref.name}');
+        } catch (e) {
+          print('StorageService: Error deleting walk photo ${ref.name} - $e');
+        }
+      }
+      
+      print('StorageService: All walk photos deleted for user $userId');
+    } catch (e) {
+      print('StorageService: Error deleting walk photos for $userId - $e');
+      // Don't throw - continue with other deletions
+    }
+  }
+
+  /// Delete all user's chat images
+  static Future<void> deleteAllUserChatImages(String userId) async {
+    try {
+      final Reference chatImagesRef = _storage.ref().child('chats/$userId');
+      final ListResult result = await chatImagesRef.listAll();
+      
+      // Delete all items in the user's chat images folder
+      for (Reference ref in result.items) {
+        try {
+          await ref.delete();
+          print('StorageService: Deleted chat image ${ref.name}');
+        } catch (e) {
+          print('StorageService: Error deleting chat image ${ref.name} - $e');
+        }
+      }
+      
+      print('StorageService: All chat images deleted for user $userId');
+    } catch (e) {
+      print('StorageService: Error deleting chat images for $userId - $e');
+      // Don't throw - continue with other deletions
+    }
+  }
+
+  /// Delete ALL user data from storage (comprehensive cleanup)
+  static Future<void> deleteAllUserData(String userId) async {
+    try {
+      print('StorageService: Starting comprehensive storage deletion for user $userId');
+      
+      // Delete profile picture
+      await deleteProfilePicture(userId);
+      
+      // Delete dog picture
+      await deleteDogPicture(userId);
+      
+      // Delete all stories
+      await deleteAllUserStories(userId);
+      
+      // Delete all walk photos
+      await deleteAllUserWalkPhotos(userId);
+      
+      // Delete all chat images
+      await deleteAllUserChatImages(userId);
+      
+      print('StorageService: Comprehensive storage deletion completed for user $userId');
+    } catch (e) {
+      print('StorageService: Error during comprehensive deletion for $userId - $e');
+      // Don't throw - this allows other cleanup to continue
+    }
+  }
 } 

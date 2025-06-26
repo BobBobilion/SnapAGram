@@ -292,8 +292,13 @@ class AuthService extends ChangeNotifier {
 
   // Get current user stream
   Stream<UserModel?> get userStream {
-    if (_user == null) return Stream.value(null);
-    return UserDatabaseService.listenToUser(_user!.uid);
+    return _auth.authStateChanges().asyncExpand((user) {
+      if (user != null) {
+        return UserDatabaseService.listenToUser(user.uid);
+      } else {
+        return Stream.value(null);
+      }
+    });
   }
 
   // Check if handle is available
