@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_database_service.dart';
 import '../../models/user_model.dart';
@@ -10,19 +10,19 @@ import '../auth/complete_onboarding_screen.dart';
 import 'my_stories_screen.dart';
 import 'dart:async';
 
-class AccountScreen extends StatefulWidget {
+class AccountScreen extends ConsumerStatefulWidget {
   final Function(int)? onNavigateToTab;
   
   const AccountScreen({super.key, this.onNavigateToTab});
 
   @override
-  State<AccountScreen> createState() => _AccountScreenState();
+  ConsumerState<AccountScreen> createState() => _AccountScreenState();
 }
 
-class _AccountScreenState extends State<AccountScreen> {
+class _AccountScreenState extends ConsumerState<AccountScreen> {
   @override
   Widget build(BuildContext context) {
-    final authService = context.watch<AuthService>();
+    final authService = ref.watch(authServiceProvider);
     final user = authService.user;
 
     return Scaffold(
@@ -858,7 +858,7 @@ class _AccountScreenState extends State<AccountScreen> {
                           setState(() => isLoading = true);
 
                           try {
-                            final authService = context.read<AuthService>();
+                            final authService = ref.read(authServiceProvider);
                             await authService.deleteAccount();
                             
                             if (context.mounted) {
@@ -968,7 +968,7 @@ class _AccountScreenState extends State<AccountScreen> {
             TextButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                await context.read<AuthService>().signOut();
+                await ref.read(authServiceProvider).signOut();
                 // After signing out, navigate to the login screen and clear the navigation stack
                 if (context.mounted) {
                   Navigator.of(context).pushAndRemoveUntil(
@@ -1169,7 +1169,7 @@ class _AccountScreenState extends State<AccountScreen> {
                           setState(() => isLoading = true);
 
                           try {
-                            final authService = context.read<AuthService>();
+                            final authService = ref.read(authServiceProvider);
                             await authService.updateHandle(newHandle);
                             
                             if (context.mounted) {
@@ -1284,7 +1284,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 
                 try {
                   // Reset onboarding status in database
-                  final authService = context.read<AuthService>();
+                  final authService = ref.read(authServiceProvider);
                   final currentUser = authService.userModel;
                   
                   if (currentUser != null) {

@@ -1,11 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:image/image.dart' as img;
 import 'photo_editor_screen.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -19,7 +16,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   CameraController? _cameraController;
   List<CameraDescription> _cameras = [];
   bool _isInitialized = false;
-  bool _isFlashOn = false;
+  FlashMode _flashMode = FlashMode.off;
   bool _isFrontCamera = false;
   bool _isRecording = false;
   String _captureMode = 'photo'; // 'photo' or 'video'
@@ -60,7 +57,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     try {
       // Request camera permission
       final cameraPermission = await Permission.camera.request();
-      final micPermission = await Permission.microphone.request();
+      await Permission.microphone.request();
       
       if (cameraPermission != PermissionStatus.granted) {
         setState(() => _permissionGranted = false);
@@ -119,11 +116,11 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   Future<void> _toggleFlash() async {
     if (_cameraController == null) return;
     
-    setState(() => _isFlashOn = !_isFlashOn);
+    setState(() {
+      _flashMode = _flashMode == FlashMode.off ? FlashMode.always : FlashMode.off;
+    });
     
-    await _cameraController!.setFlashMode(
-      _isFlashOn ? FlashMode.torch : FlashMode.off,
-    );
+    await _cameraController!.setFlashMode(_flashMode);
   }
 
   Future<void> _capturePhoto() async {
@@ -133,11 +130,14 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
     try {
       // Set flash mode for capture
-      await _cameraController!.setFlashMode(
-        _isFlashOn ? FlashMode.always : FlashMode.off,
-      );
+      await _cameraController!.setFlashMode(_flashMode);
 
       final XFile photo = await _cameraController!.takePicture();
+
+      // Turn flash off after capture
+      if (_flashMode == FlashMode.always) {
+        await _cameraController!.setFlashMode(FlashMode.off);
+      }
       
       // Navigate to photo editor
       if (mounted) {
@@ -235,7 +235,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: !_permissionGranted
             ? _buildPermissionDenied()
@@ -262,7 +262,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             style: GoogleFonts.poppins(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: Colors.white,
+              color: Colors.black,
             ),
           ),
           const SizedBox(height: 8),
@@ -270,7 +270,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             'Please allow camera access to take photos',
             style: GoogleFonts.poppins(
               fontSize: 14,
-              color: Colors.grey[400],
+              color: Colors.grey[600],
             ),
             textAlign: TextAlign.center,
           ),
@@ -288,9 +288,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
   Widget _buildLoadingScreen() {
     return const Center(
-      child: CircularProgressIndicator(
-        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-      ),
+      child: CircularProgressIndicator(),
     );
   }
 
@@ -323,12 +321,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.white.withOpacity(0.5),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.close,
-                color: Colors.white,
+                color: Colors.black,
                 size: 24,
               ),
             ),
@@ -349,12 +347,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.white.withOpacity(0.5),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                _isFlashOn ? Icons.flash_on : Icons.flash_off,
-                color: _isFlashOn ? Colors.yellow : Colors.white,
+                _getFlashIcon(),
+                color: _flashMode == FlashMode.off ? Colors.black : Colors.amber,
                 size: 24,
               ),
             ),
@@ -362,6 +360,17 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         ],
       ),
     );
+  }
+
+  IconData _getFlashIcon() {
+    switch (_flashMode) {
+      case FlashMode.off:
+        return Icons.flash_off;
+      case FlashMode.always:
+        return Icons.flash_on;
+      default:
+        return Icons.flash_off;
+    }
   }
 
   Widget _buildModeButton(String mode, String label) {
@@ -372,17 +381,17 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
+          color: isSelected ? Colors.blue : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: Colors.white,
+            color: Colors.blue,
             width: 1,
           ),
         ),
         child: Text(
           label,
           style: GoogleFonts.poppins(
-            color: isSelected ? Colors.black : Colors.white,
+            color: isSelected ? Colors.white : Colors.blue,
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
@@ -397,7 +406,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withOpacity(0.2),
+          color: Colors.grey.withOpacity(0.2),
           width: 1,
         ),
       ),
@@ -434,12 +443,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.white.withOpacity(0.5),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.flip_camera_ios,
-                    color: Colors.white,
+                    Icons.flip_camera_ios_outlined,
+                    color: Colors.black,
                     size: 20,
                   ),
                 ),
@@ -500,16 +509,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               width: 60,
               height: 60,
               decoration: BoxDecoration(
-                color: Colors.grey[800],
+                color: Colors.grey[200],
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 1,
-                ),
               ),
               child: const Icon(
-                Icons.photo_library,
-                color: Colors.white,
+                Icons.photo_library_outlined,
+                color: Colors.black,
                 size: 28,
               ),
             ),
@@ -525,31 +530,22 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Colors.blue,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: _isRecording ? Colors.red : Colors.white.withOpacity(0.3),
+                  color: _isRecording ? Colors.red : Colors.white,
                   width: 4,
                 ),
               ),
               child: Center(
-                child: Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: _isRecording ? Colors.red : Colors.grey[200],
-                    shape: _isRecording ? BoxShape.rectangle : BoxShape.circle,
-                    borderRadius: _isRecording ? BorderRadius.circular(8) : null,
-                  ),
-                  child: Icon(
-                    _captureMode == 'photo' 
-                        ? Icons.camera_alt 
-                        : _isRecording 
-                            ? Icons.stop 
-                            : Icons.fiber_manual_record,
-                    color: _isRecording ? Colors.white : Colors.grey[600],
-                    size: 32,
-                  ),
+                child: Icon(
+                  _captureMode == 'photo' 
+                      ? Icons.camera_alt_outlined 
+                      : _isRecording 
+                          ? Icons.stop_outlined 
+                          : Icons.videocam_outlined,
+                  color: Colors.white,
+                  size: 32,
                 ),
               ),
             ),
@@ -562,16 +558,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               width: 60,
               height: 60,
               decoration: BoxDecoration(
-                color: Colors.grey[800],
+                color: Colors.grey[200],
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 1,
-                ),
               ),
               child: const Icon(
-                Icons.settings,
-                color: Colors.white,
+                Icons.settings_outlined,
+                color: Colors.black,
                 size: 28,
               ),
             ),
@@ -591,47 +583,44 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   void _showCameraSettings() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
       builder: (BuildContext context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(top: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[600],
-                  borderRadius: BorderRadius.circular(2),
-                ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildSettingItem(
+                    icon: Icons.grid_on_outlined,
+                    title: 'Grid',
+                    subtitle: 'Show grid overlay',
+                    value: _showGrid,
+                    onChanged: (value) {
+                      setState(() => _showGrid = value);
+                      Navigator.pop(context);
+                    },
+                  ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildSettingItem(
-                      icon: Icons.grid_on,
-                      title: 'Grid',
-                      subtitle: 'Show grid overlay',
-                      value: _showGrid,
-                      onChanged: (value) {
-                        setState(() => _showGrid = value);
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );
@@ -645,18 +634,18 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     required Function(bool) onChanged,
   }) {
     return ListTile(
-      leading: Icon(icon, color: Colors.white),
+      leading: Icon(icon, color: Colors.black),
       title: Text(
         title,
         style: GoogleFonts.poppins(
-          color: Colors.white,
+          color: Colors.black,
           fontWeight: FontWeight.w500,
         ),
       ),
       subtitle: Text(
         subtitle,
         style: GoogleFonts.poppins(
-          color: Colors.grey[400],
+          color: Colors.grey[600],
           fontSize: 12,
         ),
       ),
@@ -673,7 +662,7 @@ class GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.black.withOpacity(0.3)
       ..strokeWidth = 1;
 
     // Vertical lines
@@ -691,4 +680,4 @@ class GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-} 
+}

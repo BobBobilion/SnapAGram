@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart';
 import '../models/story_model.dart';
 import '../models/chat_model.dart';
@@ -10,29 +11,30 @@ import 'story_database_service.dart';
 import 'chat_database_service.dart';
 import 'storage_service.dart';
 
+final appServiceManagerProvider = Provider<AppServiceManager>((ref) {
+  return AppServiceManager(ref);
+});
+
 /// Centralized service manager for the SnapAGram app
 /// Provides easy access to all backend services and manages app-wide operations
 class AppServiceManager extends ChangeNotifier {
-  static final AppServiceManager _instance = AppServiceManager._internal();
-  factory AppServiceManager() => _instance;
-  AppServiceManager._internal();
+  final ProviderRef ref;
 
-  // Service instances
-  final AuthService _authService = AuthService();
-  
+  AppServiceManager(this.ref);
+
   // Getters for services
-  AuthService get auth => _authService;
+  AuthService get auth => ref.read(authServiceProvider);
   
   // Current user shortcuts
-  UserModel? get currentUser => _authService.userModel;
-  String? get currentUserId => _authService.user?.uid;
-  bool get isAuthenticated => _authService.isAuthenticated;
+  UserModel? get currentUser => auth.userModel;
+  String? get currentUserId => auth.user?.uid;
+  bool get isAuthenticated => auth.isAuthenticated;
 
   // Initialize the service manager
   Future<void> initialize() async {
     try {
       // Listen to auth changes
-      _authService.addListener(_onAuthStateChanged);
+      auth.addListener(_onAuthStateChanged);
       
       print('AppServiceManager: Initialized successfully');
     } catch (e) {
@@ -48,7 +50,7 @@ class AppServiceManager extends ChangeNotifier {
   // Dispose resources
   @override
   void dispose() {
-    _authService.removeListener(_onAuthStateChanged);
+    auth.removeListener(_onAuthStateChanged);
     super.dispose();
   }
 
@@ -444,7 +446,7 @@ class AppServiceManager extends ChangeNotifier {
 
   // Stream subscriptions for real-time updates
   Stream<UserModel?> get currentUserStream {
-    return _authService.userStream;
+    return auth.userStream;
   }
 
   Stream<List<UserModel>> getCurrentUserConnectionsStream() {

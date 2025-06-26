@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
 import '../../models/chat_model.dart';
 import 'chat_conversation_screen.dart';
 
-class ChatsScreen extends StatefulWidget {
+class ChatsScreen extends ConsumerStatefulWidget {
   const ChatsScreen({super.key});
 
   @override
-  State<ChatsScreen> createState() => _ChatsScreenState();
+  ConsumerState<ChatsScreen> createState() => _ChatsScreenState();
 }
 
-class _ChatsScreenState extends State<ChatsScreen> {
+class _ChatsScreenState extends ConsumerState<ChatsScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final AppServiceManager _serviceManager = AppServiceManager();
   
   List<ChatModel> _chats = [];
   bool _isLoading = false;
@@ -36,7 +36,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
     setState(() => _isLoading = true);
     
     try {
-      final chats = await _serviceManager.getCurrentUserChats();
+      final serviceManager = ref.read(appServiceManagerProvider);
+      final chats = await serviceManager.getCurrentUserChats();
       if (mounted) {
         setState(() {
           _chats = chats;
@@ -184,7 +185,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   Widget _buildChatItem(ChatModel chat) {
-    final currentUserId = _serviceManager.currentUserId ?? '';
+    final serviceManager = ref.read(appServiceManagerProvider);
+    final currentUserId = serviceManager.currentUserId ?? '';
     final isGroup = chat.type == ChatType.group;
     final unreadCount = chat.getUnreadCount(currentUserId);
     final hasUnreadMessages = unreadCount > 0;
@@ -367,8 +369,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
       MaterialPageRoute(
         builder: (context) => ChatConversationScreen(
           chatId: chat.id,
-          otherUserId: chat.getOtherParticipant(_serviceManager.currentUserId ?? ''),
-          otherUserName: chat.getDisplayName(_serviceManager.currentUserId ?? ''),
+          otherUserId: chat.getOtherParticipant(ref.read(appServiceManagerProvider).currentUserId ?? ''),
+          otherUserName: chat.getDisplayName(ref.read(appServiceManagerProvider).currentUserId ?? ''),
         ),
       ),
     );

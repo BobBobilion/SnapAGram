@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import '../auth/login_screen.dart';
@@ -9,14 +9,14 @@ import '../chats/chats_screen.dart';
 import '../account/account_screen.dart';
 import '../camera/camera_screen.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
   late List<Widget> _screens;
   late PageController _pageController;
@@ -72,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     // Redirect to LoginScreen if the user becomes unauthenticated
-    final isAuthenticated = context.watch<AuthService>().isAuthenticated;
+    final isAuthenticated = ref.watch(authServiceProvider).isAuthenticated;
     if (!isAuthenticated) {
       // Ensure navigation happens after the current frame to avoid build conflicts
       WidgetsBinding.instance.addPostFrameCallback((_) {

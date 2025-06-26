@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
 import '../../models/user_model.dart';
 import 'add_friends_screen.dart';
 import '../chats/chat_conversation_screen.dart';
 
-class FriendsScreen extends StatefulWidget {
+class FriendsScreen extends ConsumerStatefulWidget {
   const FriendsScreen({super.key});
 
   @override
-  State<FriendsScreen> createState() => _FriendsScreenState();
+  ConsumerState<FriendsScreen> createState() => _FriendsScreenState();
 }
 
-class _FriendsScreenState extends State<FriendsScreen> {
+class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   final ScrollController _scrollController = ScrollController();
-  final AppServiceManager _serviceManager = AppServiceManager();
   
   List<UserModel> _friends = [];
   List<UserModel> _friendRequests = [];
@@ -62,7 +62,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
     setState(() => _isLoadingFriends = true);
     
     try {
-      final friends = await _serviceManager.getCurrentUserFriends();
+      final serviceManager = ref.read(appServiceManagerProvider);
+      final friends = await serviceManager.getCurrentUserFriends();
       if (mounted) {
         setState(() {
           _friends = friends;
@@ -88,7 +89,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
     setState(() => _isLoadingRequests = true);
     
     try {
-      final requests = await _serviceManager.getFriendRequests();
+      final serviceManager = ref.read(appServiceManagerProvider);
+      final requests = await serviceManager.getFriendRequests();
       if (mounted) {
         setState(() {
           _friendRequests = requests;
@@ -110,7 +112,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Future<void> _acceptFriendRequest(UserModel user) async {
     try {
-      await _serviceManager.acceptFriendRequest(user.uid);
+      final serviceManager = ref.read(appServiceManagerProvider);
+      await serviceManager.acceptFriendRequest(user.uid);
       setState(() {
         _friendRequests.removeWhere((request) => request.uid == user.uid);
       });
@@ -138,7 +141,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Future<void> _rejectFriendRequest(UserModel user) async {
     try {
-      await _serviceManager.rejectFriendRequest(user.uid);
+      final serviceManager = ref.read(appServiceManagerProvider);
+      await serviceManager.rejectFriendRequest(user.uid);
       setState(() {
         _friendRequests.removeWhere((request) => request.uid == user.uid);
       });
@@ -610,7 +614,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Future<void> _startChatWithFriend(UserModel friend) async {
     try {
       // Create or get existing direct chat
-      final chatId = await _serviceManager.createDirectChat(friend.uid);
+      final serviceManager = ref.read(appServiceManagerProvider);
+      final chatId = await serviceManager.createDirectChat(friend.uid);
       
       // Navigate to chat conversation screen
       if (mounted) {

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'dart:math';
 
@@ -15,7 +15,7 @@ import '../../services/storage_service.dart';
 import '../../widgets/address_autocomplete_field.dart';
 import '../home/home_screen.dart';
 
-class CompleteOnboardingScreen extends StatefulWidget {
+class CompleteOnboardingScreen extends ConsumerStatefulWidget {
   final String email;
   final String displayName;
   final String handle;
@@ -28,16 +28,23 @@ class CompleteOnboardingScreen extends StatefulWidget {
   });
 
   @override
-  State<CompleteOnboardingScreen> createState() => _CompleteOnboardingScreenState();
+  ConsumerState<CompleteOnboardingScreen> createState() => _CompleteOnboardingScreenState();
 }
 
-class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
+class _CompleteOnboardingScreenState extends ConsumerState<CompleteOnboardingScreen>
     with TickerProviderStateMixin {
   // Controllers and form keys
   final _formKey = GlobalKey<FormState>();
   final _pageController = PageController();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  
+  // Validation animations
+  late AnimationController _validationAnimationController;
+  late Animation<double> _flashAnimation;
+  
+  // Validation state tracking
+  Map<String, bool> _fieldValidationErrors = {};
   
   // Basic info
   late TextEditingController _nameController;
@@ -111,12 +118,27 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
       curve: Curves.easeInOut,
     ));
     
+    // Validation flash animation
+    _validationAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    _flashAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _validationAnimationController,
+      curve: Curves.easeInOut,
+    ));
+    
     _animationController.forward();
   }
   
   @override
   void dispose() {
     _animationController.dispose();
+    _validationAnimationController.dispose();
     _pageController.dispose();
     _nameController.dispose();
     _handleController.dispose();
@@ -150,12 +172,79 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
   }
   
   void _nextStep() {
+    // Dismiss keyboard before transitioning
+    FocusScope.of(context).unfocus();
+    
     if (_currentStep < _totalSteps - 1) {
       setState(() => _currentStep++);
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
+      
+      // Clear validation errors when moving to next step
+      _clearValidationErrors();
+    }
+  }
+  
+  void _handleDisabledNextClick() {
+    // Validate current step and show errors
+    _validateCurrentStep();
+    
+    // Flash animation (twice)
+    _validationAnimationController.forward().then((_) {
+      _validationAnimationController.reverse().then((_) {
+        _validationAnimationController.forward().then((_) {
+          _validationAnimationController.reverse();
+        });
+      });
+    });
+  }
+  
+  void _validateCurrentStep() {
+    setState(() {
+      switch (_currentStep) {
+        case 0: // Basic info
+          _fieldValidationErrors['name'] = _nameController.text.isEmpty;
+          _fieldValidationErrors['handle'] = _handleController.text.isEmpty;
+          break;
+        case 1: // Role selection
+          _fieldValidationErrors['role'] = _selectedRole == null;
+          break;
+        case 2: // Role-specific questions
+          if (_selectedRole == UserRole.walker) {
+            _fieldValidationErrors['dogSizes'] = _selectedDogSizes.isEmpty;
+            _fieldValidationErrors['walkDurations'] = _selectedWalkDurations.isEmpty;
+            _fieldValidationErrors['availability'] = _selectedAvailability.isEmpty;
+          } else {
+            _fieldValidationErrors['dogName'] = _dogNameController.text.isEmpty;
+            _fieldValidationErrors['dogBreed'] = _dogBreedController.text.isEmpty;
+            _fieldValidationErrors['dogAge'] = _dogAgeController.text.isEmpty;
+            _fieldValidationErrors['dogSize'] = _dogSize == null;
+            _fieldValidationErrors['dogGender'] = _dogGender == null;
+            _fieldValidationErrors['preferredWalkDuration'] = _preferredWalkDuration == null;
+          }
+          break;
+        case 3: // Location
+          _fieldValidationErrors['city'] = _cityController.text.isEmpty;
+          break;
+        case 4: // Final review
+          break;
+      }
+    });
+  }
+  
+  void _clearValidationErrors() {
+    setState(() {
+      _fieldValidationErrors.clear();
+    });
+  }
+  
+  void _clearFieldError(String fieldKey) {
+    if (_fieldValidationErrors.containsKey(fieldKey)) {
+      setState(() {
+        _fieldValidationErrors.remove(fieldKey);
+      });
     }
   }
   
@@ -183,6 +272,8 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                  _selectedAvailability.isNotEmpty;
         } else {
           return _dogNameController.text.isNotEmpty && 
+                 _dogBreedController.text.isNotEmpty &&
+                 _dogAgeController.text.isNotEmpty &&
                  _dogSize != null && 
                  _dogGender != null &&
                  _preferredWalkDuration != null;
@@ -208,7 +299,7 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
     setState(() => _isLoading = true);
     
     try {
-      final authService = context.read<AuthService>();
+      final authService = ref.read(authServiceProvider);
       final user = authService.user;
       if (user == null) throw Exception('User not authenticated');
       
@@ -448,41 +539,73 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
           const SizedBox(height: 32),
           
           // Name field
-          TextFormField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              labelText: 'Full Name',
-              hintText: 'Enter your full name',
-              prefixIcon: const Icon(Icons.person_outline),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            validator: (value) => value?.isEmpty ?? true ? 'Name is required' : null,
+          AnimatedBuilder(
+            animation: _flashAnimation,
+            builder: (context, child) {
+              final hasError = _fieldValidationErrors['name'] == true;
+              return TextFormField(
+                controller: _nameController,
+                onChanged: (value) => _clearFieldError('name'),
+                decoration: InputDecoration(
+                  labelText: 'Full Name',
+                  hintText: 'Enter your full name',
+                  prefixIcon: const Icon(Icons.person_outline),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: hasError ? Colors.red : cornflowerBlue, width: 2),
+                  ),
+                ),
+                validator: (value) => value?.isEmpty ?? true ? 'Name is required' : null,
+              );
+            },
           ),
           const SizedBox(height: 16),
           
           // Handle field
-          TextFormField(
-            controller: _handleController,
-            decoration: InputDecoration(
-              labelText: 'Username',
-              hintText: 'Choose a unique username',
-              prefixIcon: const Icon(Icons.alternate_email),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () {
-                  setState(() {
-                    _handleController.text = _generateRandomHandle(_nameController.text);
-                  });
-                },
-                tooltip: 'Generate random username',
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            validator: (value) => value?.isEmpty ?? true ? 'Username is required' : null,
+          AnimatedBuilder(
+            animation: _flashAnimation,
+            builder: (context, child) {
+              final hasError = _fieldValidationErrors['handle'] == true;
+              return TextFormField(
+                controller: _handleController,
+                onChanged: (value) => _clearFieldError('handle'),
+                decoration: InputDecoration(
+                  labelText: 'Username',
+                  hintText: 'Choose a unique username',
+                  prefixIcon: const Icon(Icons.alternate_email),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: () {
+                      setState(() {
+                        _handleController.text = _generateRandomHandle(_nameController.text);
+                      });
+                    },
+                    tooltip: 'Generate random username',
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: hasError ? Colors.red : cornflowerBlue, width: 2),
+                  ),
+                ),
+                validator: (value) => value?.isEmpty ?? true ? 'Username is required' : null,
+              );
+            },
           ),
           const SizedBox(height: 16),
           
@@ -528,23 +651,6 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
           ),
           const SizedBox(height: 32),
           
-          // Walker card
-          _buildRoleCard(
-            role: UserRole.walker,
-            title: 'I\'m a Walker',
-            subtitle: 'I want to walk dogs and earn money',
-            icon: Icons.directions_walk,
-            color: cornflowerBlue,
-            features: [
-              'Set your availability',
-              'Choose dog sizes you prefer',
-              'Track walks with GPS',
-              'Build your reputation',
-            ],
-          ),
-          
-          const SizedBox(height: 20),
-          
           // Owner card
           _buildRoleCard(
             role: UserRole.owner,
@@ -557,6 +663,23 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
               'Track your dog\'s walks live',
               'Receive photos during walks',
               'Rate and review walkers',
+            ],
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // Walker card
+          _buildRoleCard(
+            role: UserRole.walker,
+            title: 'I\'m a Walker',
+            subtitle: 'I want to walk dogs and earn money',
+            icon: Icons.directions_walk,
+            color: cornflowerBlue,
+            features: [
+              'Set your availability',
+              'Choose dog sizes you prefer',
+              'Track walks with GPS',
+              'Build your reputation',
             ],
           ),
         ],
@@ -573,134 +696,142 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
     required List<String> features,
   }) {
     final isSelected = _selectedRole == role;
+    final hasError = _fieldValidationErrors['role'] == true;
     
     return GestureDetector(
       onTap: () {
         setState(() {
           _selectedRole = role;
         });
+        _clearFieldError('role');
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOutBack,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          // Filled background with gradient
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isSelected 
-                ? [
-                    color.withOpacity(0.8),
-                    color.withOpacity(0.6),
-                  ]
-                : [
-                    color.withOpacity(0.1),
-                    color.withOpacity(0.05),
-                  ],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? color : color.withOpacity(0.3),
-            width: isSelected ? 3 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isSelected ? color.withOpacity(0.4) : Colors.grey.withOpacity(0.1),
-              blurRadius: isSelected ? 20 : 8,
-              offset: Offset(0, isSelected ? 8 : 3),
-              spreadRadius: isSelected ? 2 : 0,
-            ),
-          ],
-        ),
-        transform: Matrix4.identity()
-          ..scale(isSelected ? 1.02 : 1.0)
-          ..translate(0.0, isSelected ? -4.0 : 0.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.white.withOpacity(0.9) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    icon, 
-                    color: color, 
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected ? Colors.white : Colors.grey[800],
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: isSelected ? Colors.white.withOpacity(0.9) : Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
+      child: AnimatedBuilder(
+        animation: _flashAnimation,
+        builder: (context, child) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutBack,
+            constraints: const BoxConstraints(minHeight: 200), // Fixed minimum height
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20), // More horizontal space
+            decoration: BoxDecoration(
+              // Filled background with gradient
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isSelected 
+                    ? [
+                        color.withOpacity(0.8),
+                        color.withOpacity(0.6),
+                      ]
+                    : [
+                        color.withOpacity(0.1),
+                        color.withOpacity(0.05),
+                      ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: hasError ? Colors.red : (isSelected ? color : color.withOpacity(0.3)),
+                width: hasError ? 3 : (isSelected ? 3 : 1),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isSelected ? color.withOpacity(0.4) : Colors.grey.withOpacity(0.1),
+                  blurRadius: isSelected ? 20 : 8,
+                  offset: Offset(0, isSelected ? 8 : 3),
+                  spreadRadius: isSelected ? 2 : 0,
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            ...features.map((feature) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: isSelected ? Colors.white.withOpacity(0.2) : color.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.check, 
-                          color: isSelected ? Colors.white : color, 
-                          size: 14,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          feature,
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: isSelected ? Colors.white.withOpacity(0.95) : Colors.grey[700],
-                            fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+            transform: Matrix4.identity()
+              ..scale(isSelected ? 1.02 : 1.0)
+              ..translate(0.0, isSelected ? -4.0 : 0.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.white.withOpacity(0.9) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withOpacity(0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                )),
-          ],
-        ),
+                      child: Icon(
+                        icon, 
+                        color: color, 
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: GoogleFonts.poppins(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? Colors.white : Colors.grey[800],
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: isSelected ? Colors.white.withOpacity(0.9) : Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                ...features.map((feature) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.white.withOpacity(0.2) : color.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.check, 
+                              color: isSelected ? Colors.white : color, 
+                              size: 14,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              feature,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                color: isSelected ? Colors.white.withOpacity(0.95) : Colors.grey[700],
+                                fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -766,6 +897,13 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                 } else {
                   _selectedDogSizes.remove(dogSize);
                 }
+                
+                // Clear validation errors
+                if (_selectedRole == UserRole.walker) {
+                  _clearFieldError('dogSizes');
+                } else {
+                  _clearFieldError('dogSize');
+                }
               });
             },
             isMultiSelect: true,
@@ -803,6 +941,13 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                     _selectedWalkDurations.remove(duration);
                   }
                 }
+                
+                // Clear validation errors
+                if (_selectedRole == UserRole.walker) {
+                  _clearFieldError('walkDurations');
+                } else {
+                  _clearFieldError('preferredWalkDuration');
+                }
               });
             },
             isMultiSelect: true,
@@ -811,21 +956,7 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
           const SizedBox(height: 24),
           
           // Availability
-          _buildSelectionSection(
-            title: 'When are you usually available?',
-            items: Availability.values,
-            selectedItems: _selectedAvailability,
-            onSelectionChanged: (item, isSelected) {
-              setState(() {
-                if (isSelected) {
-                  _selectedAvailability.add(item);
-                } else {
-                  _selectedAvailability.remove(item);
-                }
-              });
-            },
-            itemBuilder: (availability) => availability.displayName,
-          ),
+          _buildAvailabilityChipSection(),
         ],
       ),
     );
@@ -898,17 +1029,33 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
           const SizedBox(height: 24),
           
           // Dog name
-          TextFormField(
-            controller: _dogNameController,
-            decoration: InputDecoration(
-              labelText: 'Dog\'s Name',
-              hintText: 'What\'s your dog\'s name?',
-              prefixIcon: const Icon(Icons.pets),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            validator: (value) => value?.isEmpty ?? true ? 'Dog\'s name is required' : null,
+          AnimatedBuilder(
+            animation: _flashAnimation,
+            builder: (context, child) {
+              final hasError = _fieldValidationErrors['dogName'] == true;
+              return TextFormField(
+                controller: _dogNameController,
+                onChanged: (value) => _clearFieldError('dogName'),
+                decoration: InputDecoration(
+                  labelText: 'Dog\'s Name',
+                  hintText: 'What\'s your dog\'s name?',
+                  prefixIcon: const Icon(Icons.pets),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: hasError ? Colors.red : cornflowerBlue, width: 2),
+                  ),
+                ),
+                validator: (value) => value?.isEmpty ?? true ? 'Dog\'s name is required' : null,
+              );
+            },
           ),
           const SizedBox(height: 16),
           
@@ -916,34 +1063,66 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
           Row(
             children: [
               Expanded(
-                child: TextFormField(
-                  controller: _dogBreedController,
-                  decoration: InputDecoration(
-                    labelText: 'Breed',
-                    hintText: 'e.g., Golden Retriever',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                child: AnimatedBuilder(
+                  animation: _flashAnimation,
+                  builder: (context, child) {
+                    final hasError = _fieldValidationErrors['dogBreed'] == true;
+                    return TextFormField(
+                      controller: _dogBreedController,
+                      onChanged: (value) => _clearFieldError('dogBreed'),
+                      decoration: InputDecoration(
+                        labelText: 'Breed',
+                        hintText: 'e.g., Golden Retriever',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : const BorderSide(color: Colors.grey),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: hasError ? Colors.red : cornflowerBlue, width: 2),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: TextFormField(
-                  controller: _dogAgeController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
-                    LengthLimitingTextInputFormatter(2),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Age',
-                    hintText: 'e.g., 3',
-                    suffixText: 'years',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                child: AnimatedBuilder(
+                  animation: _flashAnimation,
+                  builder: (context, child) {
+                    final hasError = _fieldValidationErrors['dogAge'] == true;
+                    return TextFormField(
+                      controller: _dogAgeController,
+                      onChanged: (value) => _clearFieldError('dogAge'),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
+                        LengthLimitingTextInputFormatter(2),
+                      ],
+                      decoration: InputDecoration(
+                        labelText: 'Age',
+                        hintText: 'e.g., 3',
+                        suffixText: 'years',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: hasError ? const BorderSide(color: Colors.red, width: 2) : const BorderSide(color: Colors.grey),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: hasError ? Colors.red : cornflowerBlue, width: 2),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -972,6 +1151,7 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                   }[option]!;
                 }
               });
+              _clearFieldError('dogSize');
             },
             isMultiSelect: false,
           ),
@@ -1003,6 +1183,7 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                   }[option]!;
                 }
               });
+              _clearFieldError('preferredWalkDuration');
             },
             isMultiSelect: false,
           ),
@@ -1066,19 +1247,32 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
           const SizedBox(height: 32),
           
           // City field with autocomplete
-          AddressAutocompleteField(
-            controller: _cityController,
-            labelText: 'City',
-            hintText: 'Enter your city',
-            prefixIcon: Icons.location_on_outlined,
-            validator: (value) => value?.isEmpty ?? true ? 'City is required' : null,
-            onAddressSelected: (address) {
-              // Trigger state update to enable the next button
-              setState(() {
-                // The controller text is already set by the widget,
-                // we just need to trigger a rebuild to update the UI
-              });
-              print('Selected address: $address');
+          AnimatedBuilder(
+            animation: _flashAnimation,
+            builder: (context, child) {
+              final hasError = _fieldValidationErrors['city'] == true;
+              return Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: hasError ? Border.all(color: Colors.red, width: 2) : null,
+                ),
+                child: AddressAutocompleteField(
+                  controller: _cityController,
+                  labelText: 'City',
+                  hintText: 'Enter your city',
+                  prefixIcon: Icons.location_on_outlined,
+                  validator: (value) => value?.isEmpty ?? true ? 'City is required' : null,
+                  onAddressSelected: (address) {
+                    _clearFieldError('city');
+                    // Trigger state update to enable the next button
+                    setState(() {
+                      // The controller text is already set by the widget,
+                      // we just need to trigger a rebuild to update the UI
+                    });
+                    print('Selected address: $address');
+                  },
+                ),
+              );
             },
           ),
           const SizedBox(height: 24),
@@ -1189,7 +1383,9 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                             ),
                           ),
                           Text(
-                            '@${_handleController.text}',
+                            _handleController.text.startsWith('@') 
+                                ? _handleController.text 
+                                : '@${_handleController.text}',
                             style: GoogleFonts.poppins(
                               fontSize: 14,
                               color: Colors.grey[600],
@@ -1466,77 +1662,85 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
       'XL': Colors.red[300]!,
     };
     
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[800],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: sizeOptions.map((option) {
-            final isSelected = selectedOptions.contains(option);
-            final color = sizeColors[option]!;
-            
-            return Expanded(
-              child: Container(
-                margin: EdgeInsets.only(
-                  right: option != sizeOptions.last ? 8 : 0,
-                ),
-                child: GestureDetector(
-                  onTap: () {
-                    if (isMultiSelect) {
-                      onSelectionChanged(option, !isSelected);
-                    } else {
-                      // For single select, deselect all others first
-                      for (final otherOption in sizeOptions) {
-                        if (otherOption != option && selectedOptions.contains(otherOption)) {
-                          onSelectionChanged(otherOption, false);
-                        }
-                      }
-                      onSelectionChanged(option, !isSelected);
-                    }
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(isSelected ? 1.0 : 0.6),
-                      borderRadius: BorderRadius.circular(25),
-                      border: Border.all(
-                        color: color,
-                        width: isSelected ? 3 : 2,
-                      ),
-                      boxShadow: isSelected ? [
-                        BoxShadow(
-                          color: color.withOpacity(0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ] : null,
+    return AnimatedBuilder(
+      animation: _flashAnimation,
+      builder: (context, child) {
+        final hasError = (_selectedRole == UserRole.walker && _fieldValidationErrors['dogSizes'] == true) ||
+                        (_selectedRole == UserRole.owner && _fieldValidationErrors['dogSize'] == true);
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: hasError ? Colors.red : Colors.grey[800],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: sizeOptions.map((option) {
+                final isSelected = selectedOptions.contains(option);
+                final color = sizeColors[option]!;
+                
+                return Expanded(
+                  child: Container(
+                    margin: EdgeInsets.only(
+                      right: option != sizeOptions.last ? 8 : 0,
                     ),
-                    child: Center(
-                      child: Text(
-                        option,
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected ? Colors.white : Colors.white.withOpacity(0.9),
+                    child: GestureDetector(
+                      onTap: () {
+                        if (isMultiSelect) {
+                          onSelectionChanged(option, !isSelected);
+                        } else {
+                          // For single select, deselect all others first
+                          for (final otherOption in sizeOptions) {
+                            if (otherOption != option && selectedOptions.contains(otherOption)) {
+                              onSelectionChanged(otherOption, false);
+                            }
+                          }
+                          onSelectionChanged(option, !isSelected);
+                        }
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(isSelected ? 1.0 : 0.6),
+                          borderRadius: BorderRadius.circular(25),
+                          border: Border.all(
+                            color: hasError ? Colors.red : color,
+                            width: hasError ? 3 : (isSelected ? 3 : 2),
+                          ),
+                          boxShadow: isSelected ? [
+                            BoxShadow(
+                              color: color.withOpacity(0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ] : null,
+                        ),
+                        child: Center(
+                          child: Text(
+                            option,
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? Colors.white : Colors.white.withOpacity(0.9),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1550,92 +1754,202 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
   }) {
     final durationOptions = ['<15 min', '15-30 min', '30+ min'];
     
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[800],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: durationOptions.map((option) {
-            final isSelected = selectedOptions.contains(option);
-            
-            return Expanded(
-              child: Container(
-                margin: EdgeInsets.only(
-                  right: option != durationOptions.last ? 8 : 0,
-                ),
-                child: GestureDetector(
-                  onTap: () {
-                    if (isMultiSelect) {
-                      onSelectionChanged(option, !isSelected);
-                    } else {
-                      // For single select, deselect all others first
-                      for (final otherOption in durationOptions) {
-                        if (otherOption != option && selectedOptions.contains(otherOption)) {
-                          onSelectionChanged(otherOption, false);
+    return AnimatedBuilder(
+      animation: _flashAnimation,
+      builder: (context, child) {
+        final hasError = (_selectedRole == UserRole.walker && _fieldValidationErrors['walkDurations'] == true) ||
+                        (_selectedRole == UserRole.owner && _fieldValidationErrors['preferredWalkDuration'] == true);
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,  
+          children: [
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: hasError ? Colors.red : Colors.grey[800],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: durationOptions.map((option) {
+                final isSelected = selectedOptions.contains(option);
+                
+                return Expanded(
+                  child: Container(
+                    margin: EdgeInsets.only(
+                      right: option != durationOptions.last ? 8 : 0,
+                    ),
+                    child: GestureDetector(
+                      onTap: () {
+                        if (isMultiSelect) {
+                          onSelectionChanged(option, !isSelected);
+                        } else {
+                          // For single select, deselect all others first
+                          for (final otherOption in durationOptions) {
+                            if (otherOption != option && selectedOptions.contains(otherOption)) {
+                              onSelectionChanged(otherOption, false);
+                            }
+                          }
+                          onSelectionChanged(option, !isSelected);
                         }
-                      }
-                      onSelectionChanged(option, !isSelected);
-                    }
-                  },
-                                      child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? cornflowerBlue : Colors.white,
-                        borderRadius: BorderRadius.circular(25),
-                        border: Border.all(
-                          color: cornflowerBlue,
-                          width: isSelected ? 3 : 2,
-                        ),
-                        boxShadow: isSelected ? [
-                          BoxShadow(
-                            color: cornflowerBlue.withOpacity(0.4),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected ? cornflowerBlue : Colors.white,
+                          borderRadius: BorderRadius.circular(25),
+                          border: Border.all(
+                            color: hasError ? Colors.red : cornflowerBlue,
+                            width: hasError ? 3 : (isSelected ? 3 : 2),
                           ),
-                        ] : null,
-                      ),
-                      child: Center(
-                        child: Text(
-                          option,
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.white : cornflowerBlue,
+                          boxShadow: isSelected ? [
+                            BoxShadow(
+                              color: cornflowerBlue.withOpacity(0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ] : null,
+                        ),
+                        child: Center(
+                          child: Text(
+                            option,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? Colors.white : cornflowerBlue,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAvailabilityChipSection() {
+    final availabilityOptions = {
+      Availability.morning: {'icon': Icons.wb_sunny, 'color': Colors.orange[300]!},
+      Availability.afternoon: {'icon': Icons.wb_sunny_outlined, 'color': Colors.amber[300]!},
+      Availability.evening: {'icon': Icons.nightlight_round, 'color': Colors.indigo[300]!},
+    };
+    
+    return AnimatedBuilder(
+      animation: _flashAnimation,
+      builder: (context, child) {
+        final hasError = _fieldValidationErrors['availability'] == true;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'When are you usually available?',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: hasError ? Colors.red : Colors.grey[800],
               ),
-            );
-          }).toList(),
-        ),
-      ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: availabilityOptions.entries.map((entry) {
+                final availability = entry.key;
+                final config = entry.value;
+                final isSelected = _selectedAvailability.contains(availability);
+                final color = config['color'] as Color;
+                final icon = config['icon'] as IconData;
+                
+                return Expanded(
+                  child: Container(
+                    margin: EdgeInsets.only(
+                      right: availability != Availability.evening ? 8 : 0,
+                    ),
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedAvailability.remove(availability);
+                          } else {
+                            _selectedAvailability.add(availability);
+                          }
+                        });
+                        _clearFieldError('availability');
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected ? color : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: hasError ? Colors.red : color,
+                            width: hasError ? 3 : (isSelected ? 3 : 2),
+                          ),
+                          boxShadow: isSelected ? [
+                            BoxShadow(
+                              color: color.withOpacity(0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ] : null,
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              icon,
+                              color: isSelected ? Colors.white : color,
+                              size: 24,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              availability.displayName,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: isSelected ? Colors.white : color,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      },
     );
   }
 
   Widget _buildGenderChipSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Gender',
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[800],
-          ),
-        ),
-        const SizedBox(height: 12),
+    return AnimatedBuilder(
+      animation: _flashAnimation,
+      builder: (context, child) {
+        final hasError = _fieldValidationErrors['dogGender'] == true;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Gender',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: hasError ? Colors.red : Colors.grey[800],
+              ),
+            ),
+            const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
@@ -1644,6 +1958,7 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                   setState(() {
                     _dogGender = 'Male';
                   });
+                  _clearFieldError('dogGender');
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -1652,8 +1967,8 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                     color: Colors.blue[300]!.withOpacity(_dogGender == 'Male' ? 1.0 : 0.6),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Colors.blue[300]!,
-                      width: _dogGender == 'Male' ? 3 : 2,
+                      color: hasError ? Colors.red : Colors.blue[300]!,
+                      width: hasError ? 3 : (_dogGender == 'Male' ? 3 : 2),
                     ),
                     boxShadow: _dogGender == 'Male' ? [
                       BoxShadow(
@@ -1692,6 +2007,7 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                   setState(() {
                     _dogGender = 'Female';
                   });
+                  _clearFieldError('dogGender');
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -1700,8 +2016,8 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
                     color: Colors.pink[300]!.withOpacity(_dogGender == 'Female' ? 1.0 : 0.6),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Colors.pink[300]!,
-                      width: _dogGender == 'Female' ? 3 : 2,
+                      color: hasError ? Colors.red : Colors.pink[300]!,
+                      width: hasError ? 3 : (_dogGender == 'Female' ? 3 : 2),
                     ),
                     boxShadow: _dogGender == 'Female' ? [
                       BoxShadow(
@@ -1737,6 +2053,8 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
         ),
       ],
     );
+      },
+    );
   }
   
   Widget _buildNavigationButtons() {
@@ -1769,36 +2087,56 @@ class _CompleteOnboardingScreenState extends State<CompleteOnboardingScreen>
           
           // Next/Complete button
           Expanded(
-            child: ElevatedButton(
-              onPressed: _isLoading || !_canProceedFromCurrentStep()
-                  ? null
-                  : _currentStep == _totalSteps - 1
-                      ? _completeOnboarding
-                      : _nextStep,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: cornflowerBlue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : Text(
-                      _currentStep == _totalSteps - 1 ? 'Complete Setup' : 'Next',
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+            child: GestureDetector(
+              onTap: () {
+                if (_isLoading) return;
+                
+                if (!_canProceedFromCurrentStep()) {
+                  // Handle disabled button click
+                  _handleDisabledNextClick();
+                } else {
+                  // Normal button functionality
+                  if (_currentStep == _totalSteps - 1) {
+                    _completeOnboarding();
+                  } else {
+                    _nextStep();
+                  }
+                }
+              },
+              child: AnimatedBuilder(
+                animation: _flashAnimation,
+                builder: (context, child) {
+                  final canProceed = _canProceedFromCurrentStep();
+                  return Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: _isLoading || !canProceed
+                          ? Colors.grey[400]
+                          : cornflowerBlue,
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    child: Center(
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Text(
+                              _currentStep == _totalSteps - 1 ? 'Complete Setup' : 'Next',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ],

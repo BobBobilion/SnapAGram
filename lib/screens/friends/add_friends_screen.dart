@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
 import '../../models/user_model.dart';
 
-class AddFriendsScreen extends StatefulWidget {
+class AddFriendsScreen extends ConsumerStatefulWidget {
   const AddFriendsScreen({super.key});
 
   @override
-  State<AddFriendsScreen> createState() => _AddFriendsScreenState();
+  ConsumerState<AddFriendsScreen> createState() => _AddFriendsScreenState();
 }
 
-class _AddFriendsScreenState extends State<AddFriendsScreen> {
+class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final AppServiceManager _serviceManager = AppServiceManager();
   
   List<UserModel> _searchResults = [];
   List<String> _sentInvites = [];
@@ -35,13 +35,14 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
     });
     
     try {
+      final serviceManager = ref.read(appServiceManagerProvider);
       print('[DEBUG] _searchUsers called with query: "$query"');
-      final results = await _serviceManager.searchUsers(query);
+      final results = await serviceManager.searchUsers(query);
       print('[DEBUG] _searchUsers received ${results.length} results');
       
       // Filter out current user
       final filteredResults = results.where((user) {
-        return user.uid != _serviceManager.currentUserId;
+        return user.uid != serviceManager.currentUserId;
       }).toList();
       
       print('[DEBUG] After filtering current user: ${filteredResults.length} results');
@@ -72,7 +73,8 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
     });
 
     try {
-      await _serviceManager.sendFriendRequest(user.uid);
+      final serviceManager = ref.read(appServiceManagerProvider);
+      await serviceManager.sendFriendRequest(user.uid);
       setState(() {
         _sentInvites.add(user.uid);
         _isLoading = false;
@@ -155,7 +157,8 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
 
   void _showAllUsernames() async {
     try {
-      final userIdentifiers = await _serviceManager.getAllUserIdentifiers();
+      final serviceManager = ref.read(appServiceManagerProvider);
+      final userIdentifiers = await serviceManager.getAllUserIdentifiers();
       if (mounted) {
         showDialog(
           context: context,
@@ -451,8 +454,13 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
   }
 
   Widget _buildUserCard(UserModel user) {
-    final hasSentInvite = _sentInvites.contains(user.uid);
-          final isAlreadyFriend = _serviceManager.currentUser?.connections.contains(user.uid) ?? false;
+    final serviceManager = ref.read(appServiceManagerProvider);
+    final bool isFriend =
+        serviceManager.currentUser?.connections.contains(user.uid) ?? false;
+    final bool hasSentRequest = _sentInvites.contains(user.uid);
+    final bool hasReceivedRequest =
+        serviceManager.currentUser?.connectionRequests.contains(user.uid) ??
+            false;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -527,7 +535,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
             const SizedBox(width: 16),
             
             // Status Button
-            if (isAlreadyFriend)
+            if (isFriend)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -554,7 +562,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
                   ],
                 ),
               )
-            else if (hasSentInvite)
+            else if (hasSentRequest)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -581,37 +589,22 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
                   ],
                 ),
               )
-            else
+            else if (hasReceivedRequest)
               ElevatedButton(
+                onPressed: () {
+                  // TODO: Implement accept/reject from this screen
+                },
+                child: const Text('Respond'),
+              )
+            else
+              ElevatedButton.icon(
                 onPressed: _isLoading ? null : () => _sendFriendRequest(user),
+                icon: const Icon(Icons.person_add_alt_1),
+                label: const Text('Add Friend'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue[600],
                   foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
                 ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : Text(
-                        'Add',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
               ),
           ],
         ),

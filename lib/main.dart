@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
-import 'services/app_service_manager.dart';
 import 'models/enums.dart';
 import 'models/user_model.dart';
 import 'screens/auth/login_screen.dart';
@@ -23,8 +22,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AuthService(),
+    return ProviderScope(
       child: MaterialApp(
         title: 'DogWalk',
         debugShowCheckedModeBanner: false,
@@ -51,92 +49,60 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<AuthService>(
-      builder: (context, authService, child) {
-        // Debug print to see authentication state
-        print('AuthWrapper: isAuthenticated = ${authService.isAuthenticated}');
-        print('AuthWrapper: user = ${authService.user?.email}');
-        
-        if (!authService.isAuthenticated) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authService = ref.watch(authServiceProvider);
+    
+    // Debug print to see authentication state
+    print('AuthWrapper: isAuthenticated = ${authService.isAuthenticated}');
+    print('AuthWrapper: user = ${authService.user?.email}');
+    
+    if (!authService.isAuthenticated) {
+      return const LoginScreen();
+    }
+    
+    return StreamBuilder<UserModel?>(
+      stream: authService.userStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          print('AuthWrapper: Error in snapshot: ${snapshot.error}');
+          return const LoginScreen(); // Or some error screen
+        }
+
+        final userModel = snapshot.data;
+
+        if (authService.isAuthenticated && userModel != null) {
+          final hasCompletedOnboarding = _checkUserOnboardingStatusSync(userModel);
+          print('AuthWrapper: hasCompletedOnboarding: $hasCompletedOnboarding');
+
+          if (hasCompletedOnboarding) {
+            return const HomeScreen();
+          } else {
+            return CompleteOnboardingScreen(
+              email: authService.user!.email ?? '',
+              displayName: authService.user!.displayName ?? 'User',
+              handle: userModel.handle.isNotEmpty ? userModel.handle : (authService.user!.displayName?.toLowerCase().replaceAll(' ', '_') ?? 'user'),
+            );
+          }
+        } else {
           return const LoginScreen();
         }
-        
-        return StreamBuilder<UserModel?>(
-          stream: authService.userStream,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-            }
-
-            if (snapshot.hasError) {
-              print('AuthWrapper: Error in snapshot: ${snapshot.error}');
-              return const LoginScreen(); // Or some error screen
-            }
-
-            final userModel = snapshot.data;
-
-            if (authService.isAuthenticated && userModel != null) {
-              final hasCompletedOnboarding = _checkUserOnboardingStatusSync(userModel);
-              print('AuthWrapper: hasCompletedOnboarding: $hasCompletedOnboarding');
-
-              if (hasCompletedOnboarding) {
-                return const HomeScreen();
-              } else {
-                return CompleteOnboardingScreen(
-                  email: authService.user!.email ?? '',
-                  displayName: authService.user!.displayName ?? 'User',
-                  handle: userModel.handle.isNotEmpty ? userModel.handle : (authService.user!.displayName?.toLowerCase().replaceAll(' ', '_') ?? 'user'),
-                );
-              }
-            } else {
-              return const LoginScreen();
-            }
-          },
-        );
       },
     );
   }
   
-  Future<bool> _checkUserOnboardingStatus(String uid) async {
-    try {
-      final serviceManager = AppServiceManager();
-      final user = await serviceManager.getUserById(uid);
-      
-      // If user document doesn't exist, they need onboarding
-      if (user == null) {
-        print('_checkUserOnboardingStatus: User document not found for UID: $uid - needs onboarding');
-        return false;
-      }
-      
-      print('_checkUserOnboardingStatus: User found - isOnboardingComplete: ${user.isOnboardingComplete}, role: ${user.role}');
-      print('_checkUserOnboardingStatus: User walkerProfile: ${user.walkerProfile != null ? "exists" : "null"}');
-      print('_checkUserOnboardingStatus: User ownerProfile: ${user.ownerProfile != null ? "exists" : "null"}');
-      
-      // Check if user has completed onboarding
-      // Must have isOnboardingComplete=true AND have a role-specific profile
-      final hasRole = user.role != null;
-      final hasRoleProfile = (user.role == UserRole.walker && user.walkerProfile != null) || 
-                            (user.role == UserRole.owner && user.ownerProfile != null);
-      final hasCompleted = user.isOnboardingComplete && hasRole && hasRoleProfile;
-      
-      print('_checkUserOnboardingStatus: hasRole: $hasRole, hasRoleProfile: $hasRoleProfile, isOnboardingComplete: ${user.isOnboardingComplete}');
-      print('_checkUserOnboardingStatus: Final result: $hasCompleted');
-      
-      return hasCompleted;
-    } catch (e) {
-      print('Error checking user onboarding status: $e');
-      return false;
-    }
-  }
+
 
   bool _checkUserOnboardingStatusSync(UserModel? user) {
     try {

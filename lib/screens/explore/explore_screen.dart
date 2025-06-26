@@ -1,17 +1,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
 import '../../models/story_model.dart';
 
-class ExploreScreen extends StatefulWidget {
+class ExploreScreen extends ConsumerStatefulWidget {
   const ExploreScreen({super.key});
 
   @override
-  State<ExploreScreen> createState() => _ExploreScreenState();
+  ConsumerState<ExploreScreen> createState() => _ExploreScreenState();
 }
 
-class _ExploreScreenState extends State<ExploreScreen> 
+class _ExploreScreenState extends ConsumerState<ExploreScreen> 
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
@@ -20,7 +21,6 @@ class _ExploreScreenState extends State<ExploreScreen>
   bool _isLoadingFriends = false;
   List<StoryModel> _publicStories = [];
   List<StoryModel> _friendsStories = [];
-  final AppServiceManager _serviceManager = AppServiceManager();
 
   @override
   void initState() {
@@ -44,8 +44,9 @@ class _ExploreScreenState extends State<ExploreScreen>
     setState(() => _isLoadingPublic = true);
     
     try {
+      final serviceManager = ref.read(appServiceManagerProvider);
       print('ExploreScreen: Loading public stories...');
-      final stories = await _serviceManager.getPublicStories();
+      final stories = await serviceManager.getPublicStories();
       print('ExploreScreen: Loaded ${stories.length} public stories');
       
       if (mounted) {
@@ -74,8 +75,9 @@ class _ExploreScreenState extends State<ExploreScreen>
     setState(() => _isLoadingFriends = true);
     
     try {
+      final serviceManager = ref.read(appServiceManagerProvider);
       print('ExploreScreen: Loading friends stories...');
-      final stories = await _serviceManager.getFriendsStories();
+      final stories = await serviceManager.getFriendsStories();
       print('ExploreScreen: Loaded ${stories.length} friends stories');
       
       if (mounted) {
@@ -100,8 +102,9 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   Future<void> _refreshPublicStories() async {
     try {
+      final serviceManager = ref.read(appServiceManagerProvider);
       print('ExploreScreen: Refreshing public stories...');
-      final stories = await _serviceManager.getPublicStories();
+      final stories = await serviceManager.getPublicStories();
       print('ExploreScreen: Refreshed ${stories.length} public stories');
       
       if (mounted) {
@@ -133,8 +136,9 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   Future<void> _refreshFriendsStories() async {
     try {
+      final serviceManager = ref.read(appServiceManagerProvider);
       print('ExploreScreen: Refreshing friends stories...');
-      final stories = await _serviceManager.getFriendsStories();
+      final stories = await serviceManager.getFriendsStories();
       print('ExploreScreen: Refreshed ${stories.length} friends stories');
       
       if (mounted) {
@@ -320,8 +324,8 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   Widget _buildStoryCard(StoryModel story, String storyType) {
     final timeAgo = _getTimeAgo(story.createdAt);
-    final isLiked = story.hasUserLiked(_serviceManager.currentUserId ?? '');
-    final isViewed = story.hasUserViewed(_serviceManager.currentUserId ?? '');
+    final isLiked = story.hasUserLiked(ref.read(appServiceManagerProvider).currentUserId ?? '');
+    final isViewed = story.hasUserViewed(ref.read(appServiceManagerProvider).currentUserId ?? '');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -569,7 +573,7 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Future<void> _viewStory(StoryModel story) async {
-    final currentUserId = _serviceManager.currentUserId ?? '';
+    final currentUserId = ref.read(appServiceManagerProvider).currentUserId ?? '';
     
     // Don't update UI if already viewed
     if (story.hasUserViewed(currentUserId)) {
@@ -592,7 +596,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     
     try {
       // Sync with database in the background
-      await _serviceManager.viewStory(story.id);
+      await ref.read(appServiceManagerProvider).viewStory(story.id);
       
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -643,7 +647,7 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Future<void> _toggleLike(StoryModel story) async {
-    final currentUserId = _serviceManager.currentUserId ?? '';
+    final currentUserId = ref.read(appServiceManagerProvider).currentUserId ?? '';
     final isCurrentlyLiked = story.hasUserLiked(currentUserId);
     
     // Optimistic UI update - immediately update the local state in both lists
@@ -662,7 +666,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     
     try {
       // Sync with database in the background
-      await _serviceManager.likeStory(story.id);
+      await ref.read(appServiceManagerProvider).likeStory(story.id);
       
       // Optionally refresh from server to ensure consistency (but don't await it)
       _loadPublicStories();

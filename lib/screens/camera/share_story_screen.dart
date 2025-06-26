@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/app_service_manager.dart';
 import '../../models/story_model.dart';
 
-class ShareStoryScreen extends StatefulWidget {
+class ShareStoryScreen extends ConsumerStatefulWidget {
   final String imagePath;
 
   const ShareStoryScreen({
@@ -13,12 +14,11 @@ class ShareStoryScreen extends StatefulWidget {
   });
 
   @override
-  State<ShareStoryScreen> createState() => _ShareStoryScreenState();
+  ConsumerState<ShareStoryScreen> createState() => _ShareStoryScreenState();
 }
 
-class _ShareStoryScreenState extends State<ShareStoryScreen> {
+class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
   final TextEditingController _captionController = TextEditingController();
-  final AppServiceManager _serviceManager = AppServiceManager();
   
   String _selectedVisibility = 'public'; // 'public' or 'friends'
   bool _isPosting = false;
@@ -42,8 +42,9 @@ class _ShareStoryScreenState extends State<ShareStoryScreen> {
       
       setState(() => _uploadStatus = 'Uploading image...');
       
+      final serviceManager = ref.read(appServiceManagerProvider);
       // Create the story using the service manager - it will handle Firebase Storage upload
-      final storyId = await AppServiceManager().createStory(
+      final storyId = await serviceManager.createStory(
         type: StoryType.image,
         visibility: isPublic ? StoryVisibility.public : StoryVisibility.friends,
         mediaUrl: widget.imagePath, // Local file path - will be uploaded automatically

@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
 import '../home/home_screen.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -34,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final authService = context.read<AuthService>();
+      final authService = ref.read(authServiceProvider);
       final result = await authService.signInWithEmailAndPassword(
         _emailController.text.trim(),
         _passwordController.text,
@@ -81,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isGoogleLoading = true);
 
     try {
-      final authService = context.read<AuthService>();
+      final authService = ref.read(authServiceProvider);
       final result = await authService.signInWithGoogle();
       
       // Check if sign-in was successful

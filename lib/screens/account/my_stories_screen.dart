@@ -1,23 +1,22 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import '../../services/app_service_manager.dart';
 import '../../services/auth_service.dart';
 import '../../models/story_model.dart';
 
-class MyStoriesScreen extends StatefulWidget {
+class MyStoriesScreen extends ConsumerStatefulWidget {
   const MyStoriesScreen({super.key});
 
   @override
-  State<MyStoriesScreen> createState() => _MyStoriesScreenState();
+  ConsumerState<MyStoriesScreen> createState() => _MyStoriesScreenState();
 }
 
-class _MyStoriesScreenState extends State<MyStoriesScreen> {
+class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   List<StoryModel> _stories = [];
-  final AppServiceManager _serviceManager = AppServiceManager();
 
   @override
   void initState() {
@@ -37,8 +36,9 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
     setState(() => _isLoading = true);
     
     try {
+      final serviceManager = ref.read(appServiceManagerProvider);
       print('MyStoriesScreen: Loading user stories...');
-      final stories = await _serviceManager.getCurrentUserStories();
+      final stories = await serviceManager.getCurrentUserStories();
       print('MyStoriesScreen: Loaded ${stories.length} stories');
       
       if (mounted) {
@@ -63,7 +63,7 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authService = context.watch<AuthService>();
+    final authService = ref.watch(authServiceProvider);
     final user = authService.user;
     final userModel = authService.userModel;
 
@@ -415,7 +415,8 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
                     setState(() => isLoading = true);
 
                     try {
-                      await _serviceManager.updateStoryCaption(story.id, newCaption);
+                      final serviceManager = ref.read(appServiceManagerProvider);
+                      await serviceManager.updateStoryCaption(story.id, newCaption);
                       
                       if (context.mounted) {
                         Navigator.of(context).pop();
@@ -606,7 +607,8 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
         ),
       );
 
-      await _serviceManager.updateStoryVisibility(story.id, newVisibility);
+      final serviceManager = ref.read(appServiceManagerProvider);
+      await serviceManager.updateStoryVisibility(story.id, newVisibility);
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -674,7 +676,8 @@ class _MyStoriesScreenState extends State<MyStoriesScreen> {
                     ),
                   );
 
-                  await _serviceManager.deleteStory(story.id);
+                  final serviceManager = ref.read(appServiceManagerProvider);
+                  await serviceManager.deleteStory(story.id);
                   
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).hideCurrentSnackBar();

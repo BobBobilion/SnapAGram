@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/app_service_manager.dart';
@@ -9,7 +10,7 @@ import '../../models/chat_model.dart';
 import '../../models/message_model.dart';
 import '../../models/user_model.dart';
 
-class ChatConversationScreen extends StatefulWidget {
+class ChatConversationScreen extends ConsumerStatefulWidget {
   final String chatId;
   final String? otherUserId; // For direct chats
   final String? otherUserName; // For direct chats
@@ -22,13 +23,12 @@ class ChatConversationScreen extends StatefulWidget {
   });
 
   @override
-  State<ChatConversationScreen> createState() => _ChatConversationScreenState();
+  ConsumerState<ChatConversationScreen> createState() => _ChatConversationScreenState();
 }
 
-class _ChatConversationScreenState extends State<ChatConversationScreen> {
+class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final AppServiceManager _serviceManager = AppServiceManager();
   final ImagePicker _imagePicker = ImagePicker();
   
   ChatModel? _chat;
@@ -64,7 +64,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   void _startListeningToMessages() {
-    _messagesSubscription = _serviceManager.getChatMessagesStream(widget.chatId)
+    final serviceManager = ref.read(appServiceManagerProvider);
+    _messagesSubscription = serviceManager.getChatMessagesStream(widget.chatId)
         .listen((messages) {
       if (mounted) {
         final filteredMessages = _filterExpiredMessages(messages);
@@ -118,8 +119,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   Future<void> _deleteExpiredMessagesFromServer(List<MessageModel> expiredMessages) async {
     for (final message in expiredMessages) {
       try {
+        final serviceManager = ref.read(appServiceManagerProvider);
         // Delete message from server (for everyone)
-        await _serviceManager.deleteMessage(message.id, forEveryone: true);
+        await serviceManager.deleteMessage(message.id, forEveryone: true);
         print('ChatConversationScreen: Deleted expired message ${message.id} from server');
       } catch (e) {
         print('ChatConversationScreen: Failed to delete expired message ${message.id}: $e');
@@ -172,16 +174,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     setState(() => _isLoading = true);
     
     try {
+      final serviceManager = ref.read(appServiceManagerProvider);
       // Load chat details
-      final chat = await _serviceManager.getChatById(widget.chatId);
+      final chat = await serviceManager.getChatById(widget.chatId);
       if (chat != null) {
         setState(() => _chat = chat);
         
         // Load other user's data for direct chats
         if (chat.type == ChatType.direct) {
-          final otherUserId = chat.getOtherParticipant(_serviceManager.currentUserId ?? '');
+          final otherUserId = chat.getOtherParticipant(serviceManager.currentUserId ?? '');
           if (otherUserId != null) {
-            final otherUser = await _serviceManager.getUserById(otherUserId);
+            final otherUser = await serviceManager.getUserById(otherUserId);
             setState(() => _otherUser = otherUser);
           }
         }
@@ -194,7 +197,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
       // Mark messages as read
       if (chat != null) {
-        await _serviceManager.markMessagesAsRead(widget.chatId);
+        await serviceManager.markMessagesAsRead(widget.chatId);
       }
     } catch (e) {
       setState(() => _isLoading = false);
@@ -217,7 +220,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _messageController.clear();
 
     try {
-      await _serviceManager.sendMessage(
+      final serviceManager = ref.read(appServiceManagerProvider);
+      await serviceManager.sendMessage(
         chatId: widget.chatId,
         type: MessageType.text,
         content: message,
@@ -266,7 +270,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       setState(() => _isUploadingImage = true);
 
       // Upload image to storage
-      final currentUser = _serviceManager.currentUser;
+      final currentUser = ref.read(appServiceManagerProvider).currentUser;
       if (currentUser == null) throw Exception('User not authenticated');
 
       final String imageUrl = await StorageService.uploadChatImageFromBytes(
@@ -276,7 +280,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       );
 
       // Send image message that expires in 30 seconds
-      await _serviceManager.sendMessage(
+      final serviceManager = ref.read(appServiceManagerProvider);
+      await serviceManager.sendMessage(
         chatId: widget.chatId,
         type: MessageType.image,
         content: imageUrl,
@@ -360,16 +365,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       if (_chat!.type == ChatType.direct && _otherUser != null) {
         return _otherUser!.displayName; // Show full name
       } else {
-        return _chat!.getDisplayName(_serviceManager.currentUserId ?? '');
+        return _chat!.getDisplayName(ref.read(appServiceManagerProvider).currentUserId ?? '');
       }
     }
     return widget.otherUserName ?? 'Chat';
   }
 
   String _getSenderDisplayName(MessageModel message) {
-    if (message.senderId == _serviceManager.currentUserId) {
+    if (message.senderId == ref.read(appServiceManagerProvider).currentUserId) {
       // Current user - show first name
-      final currentUser = _serviceManager.currentUser;
+      final currentUser = ref.read(appServiceManagerProvider).currentUser;
       if (currentUser != null && currentUser.displayName.isNotEmpty) {
         return currentUser.displayName.split(' ').first;
       }
@@ -385,11 +390,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final serviceManager = ref.read(appServiceManagerProvider);
+    final currentUserId = serviceManager.currentUserId ?? '';
+    final chatName = _chat?.getDisplayName(currentUserId) ?? widget.otherUserName ?? 'Chat';
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text(
-          _getChatTitle(),
+          chatName,
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
             color: Colors.blue[600],
@@ -470,7 +478,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                             padding: const EdgeInsets.all(16),
                             itemCount: _messages.length,
                             itemBuilder: (context, index) {
-                              return _buildMessageItem(_messages[index]);
+                              final message = _messages[index];
+                              final nextMessage = (index > 0) ? _messages[index - 1] : null;
+                              final bool showAvatar = nextMessage == null || nextMessage.senderId != message.senderId;
+                              return _buildMessageItem(message, showAvatar);
                             },
                           ),
               ],
@@ -562,36 +573,40 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     );
   }
 
-  Widget _buildMessageItem(MessageModel message) {
-    final isCurrentUser = message.senderId == _serviceManager.currentUserId;
+  Widget _buildMessageItem(MessageModel message, bool showAvatar) {
+    final isCurrentUser = message.senderId == ref.read(appServiceManagerProvider).currentUserId;
     final isDeleted = message.isDeleted;
+    final timeLeft = _getMessageTimeLeft(message);
     
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: showAvatar ? 12 : 4),
       child: Row(
         mainAxisAlignment: isCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isCurrentUser) ...[
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.blue[100],
-              backgroundImage: message.senderProfilePicture != null
-                  ? NetworkImage(message.senderProfilePicture!)
-                  : null,
-              child: message.senderProfilePicture == null
-                  ? Text(
-                      message.senderUsername.isNotEmpty 
-                          ? message.senderUsername[0].toUpperCase()
-                          : 'U',
-                      style: TextStyle(
-                        color: Colors.blue[600],
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    )
-                  : null,
-            ),
+            if (showAvatar)
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.blue[100],
+                backgroundImage: message.senderProfilePicture != null
+                    ? NetworkImage(message.senderProfilePicture!)
+                    : null,
+                child: message.senderProfilePicture == null
+                    ? Text(
+                        message.senderUsername.isNotEmpty 
+                            ? message.senderUsername[0].toUpperCase()
+                            : 'U',
+                        style: TextStyle(
+                          color: Colors.blue[600],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      )
+                    : null,
+              )
+            else
+              const SizedBox(width: 40), // Keep the space for alignment
             const SizedBox(width: 8),
           ],
           
@@ -612,7 +627,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (!isCurrentUser) ...[
+                  if (!isCurrentUser && showAvatar) ...[
                     Text(
                       _getSenderDisplayName(message),
                       style: GoogleFonts.poppins(
@@ -751,11 +766,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                       if (isCurrentUser) ...[
                         const SizedBox(width: 4),
                         Icon(
-                          message.hasUserRead(_serviceManager.currentUserId ?? '')
+                          message.hasUserRead(ref.read(appServiceManagerProvider).currentUserId ?? '')
                               ? Icons.done_all
                               : Icons.done,
                           size: 12,
-                          color: message.hasUserRead(_serviceManager.currentUserId ?? '')
+                          color: message.hasUserRead(ref.read(appServiceManagerProvider).currentUserId ?? '')
                               ? Colors.white.withOpacity(0.7)
                               : Colors.white.withOpacity(0.5),
                         ),
@@ -770,11 +785,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        _getMessageTimeLeft(message) <= 5 
+                        timeLeft <= 5 
                             ? Icons.warning_amber 
                             : Icons.timer,
                         size: 10,
-                        color: _getMessageTimeLeft(message) <= 5
+                        color: timeLeft <= 5
                             ? Colors.red.withOpacity(0.7)
                             : isCurrentUser 
                                 ? Colors.white.withOpacity(0.5) 
@@ -782,12 +797,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                       ),
                       const SizedBox(width: 2),
                       Text(
-                        _getMessageTimeLeft(message) <= 0 
+                        timeLeft <= 0 
                             ? 'Deleting...'
-                            : 'Disappears in ${_getMessageTimeLeft(message)}s',
+                            : 'Disappears in ${timeLeft}s',
                         style: GoogleFonts.poppins(
                           fontSize: 9,
-                          color: _getMessageTimeLeft(message) <= 5
+                          color: timeLeft <= 5
                               ? Colors.red.withOpacity(0.7)
                               : isCurrentUser 
                                   ? Colors.white.withOpacity(0.5) 
@@ -804,25 +819,28 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           
           if (isCurrentUser) ...[
             const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.blue[100],
-              backgroundImage: _serviceManager.currentUser?.profilePictureUrl != null
-                  ? NetworkImage(_serviceManager.currentUser!.profilePictureUrl!)
-                  : null,
-              child: _serviceManager.currentUser?.profilePictureUrl == null
-                  ? Text(
-                      _serviceManager.currentUser?.displayName.isNotEmpty == true
-                          ? _serviceManager.currentUser!.displayName[0].toUpperCase()
-                          : 'U',
-                      style: TextStyle(
-                        color: Colors.blue[600],
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    )
-                  : null,
-            ),
+            if (showAvatar)
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.blue[100],
+                backgroundImage: ref.read(appServiceManagerProvider).currentUser?.profilePictureUrl != null
+                    ? NetworkImage(ref.read(appServiceManagerProvider).currentUser!.profilePictureUrl!)
+                    : null,
+                child: ref.read(appServiceManagerProvider).currentUser?.profilePictureUrl == null
+                    ? Text(
+                        ref.read(appServiceManagerProvider).currentUser?.displayName.isNotEmpty == true
+                            ? ref.read(appServiceManagerProvider).currentUser!.displayName[0].toUpperCase()
+                            : 'U',
+                        style: TextStyle(
+                          color: Colors.blue[600],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      )
+                    : null,
+              )
+            else
+              const SizedBox(width: 40), // Keep the space for alignment
           ],
         ],
       ),

@@ -3,12 +3,14 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'share_story_screen.dart';
+import 'text_overlay_notifier.dart';
 
-class PhotoEditorScreen extends StatefulWidget {
+class PhotoEditorScreen extends ConsumerStatefulWidget {
   final String imagePath;
   final bool isFromCamera;
 
@@ -19,10 +21,10 @@ class PhotoEditorScreen extends StatefulWidget {
   });
 
   @override
-  State<PhotoEditorScreen> createState() => _PhotoEditorScreenState();
+  ConsumerState<PhotoEditorScreen> createState() => _PhotoEditorScreenState();
 }
 
-class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
+class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
   final GlobalKey _repaintBoundaryKey = GlobalKey();
   img.Image? _originalImage;
   img.Image? _editedImage;
@@ -41,10 +43,6 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
   double _warmth = 0.0;
   double _vignette = 0.0;
   double _blur = 0.0;
-  
-  // Text overlay settings
-  List<TextOverlay> _textOverlays = [];
-  bool _isAddingText = false;
   
   @override
   void initState() {
@@ -161,23 +159,21 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
   }
 
   void _addTextOverlay() {
-    setState(() {
-      _textOverlays.add(TextOverlay(
-        text: 'Tap to edit',
-        position: const Offset(0.5, 0.5),
-        color: Colors.white,
-        fontSize: 24.0,
-        fontWeight: FontWeight.bold,
-      ));
-      _isAddingText = false;
-    });
+    ref.read(textOverlayProvider.notifier).add(TextOverlay(
+      id: DateTime.now().toIso8601String(),
+      text: 'Tap to edit',
+      position: const Offset(0.5, 0.5),
+      color: Colors.white,
+      fontSize: 24.0,
+      fontWeight: FontWeight.bold,
+    ));
   }
 
-  void _editTextOverlay(int index) {
-    _showTextEditDialog(_textOverlays[index], index);
+  void _editTextOverlay(TextOverlay overlay) {
+    _showTextEditDialog(overlay);
   }
 
-  void _showTextEditDialog(TextOverlay overlay, int index) {
+  void _showTextEditDialog(TextOverlay overlay) {
     final textController = TextEditingController(text: overlay.text);
     Color selectedColor = overlay.color;
     double fontSize = overlay.fontSize;
@@ -279,9 +275,7 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                setState(() {
-                  _textOverlays.removeAt(index);
-                });
+                ref.read(textOverlayProvider.notifier).remove(overlay.id);
                 Navigator.pop(context);
               },
               child: const Text('Delete'),
@@ -292,14 +286,12 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
             ),
             ElevatedButton(
               onPressed: () {
-                setState(() {
-                  _textOverlays[index] = overlay.copyWith(
-                    text: textController.text,
-                    color: selectedColor,
-                    fontSize: fontSize,
-                    fontWeight: fontWeight,
-                  );
-                });
+                ref.read(textOverlayProvider.notifier).update(overlay.copyWith(
+                  text: textController.text,
+                  color: selectedColor,
+                  fontSize: fontSize,
+                  fontWeight: fontWeight,
+                ));
                 Navigator.pop(context);
               },
               child: const Text('Save'),
@@ -368,6 +360,8 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final textOverlays = ref.watch(textOverlayProvider);
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -417,42 +411,7 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
                               ),
                             ),
                           // Text overlays
-                          ..._textOverlays.asMap().entries.map((entry) {
-                            final index = entry.key;
-                            final overlay = entry.value;
-                            return Positioned(
-                              left: overlay.position.dx * MediaQuery.of(context).size.width - 100,
-                              top: overlay.position.dy * 300,
-                              child: GestureDetector(
-                                onTap: () => _editTextOverlay(index),
-                                onPanUpdate: (details) {
-                                  setState(() {
-                                    _textOverlays[index] = overlay.copyWith(
-                                      position: Offset(
-                                        (details.globalPosition.dx) / MediaQuery.of(context).size.width,
-                                        (details.globalPosition.dy - 200) / 300,
-                                      ),
-                                    );
-                                  });
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black54,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    overlay.text,
-                                    style: GoogleFonts.poppins(
-                                      color: overlay.color,
-                                      fontSize: overlay.fontSize,
-                                      fontWeight: overlay.fontWeight,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
+                          ...textOverlays.map((overlay) => DraggableTextOverlay(overlay: overlay, onEdit: _editTextOverlay)).toList(),
                         ],
                       ),
                     ),
@@ -700,6 +659,8 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
   }
 
   Widget _buildTextPanel() {
+    final textOverlays = ref.watch(textOverlayProvider);
+
     return Column(
       children: [
         Padding(
@@ -728,7 +689,7 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
           ),
         ),
         Expanded(
-          child: _textOverlays.isEmpty
+          child: textOverlays.isEmpty
               ? Center(
                   child: Text(
                     'Tap "Add Text" to add text overlays',
@@ -739,9 +700,9 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
                   ),
                 )
               : ListView.builder(
-                  itemCount: _textOverlays.length,
+                  itemCount: textOverlays.length,
                   itemBuilder: (context, index) {
-                    final overlay = _textOverlays[index];
+                    final overlay = textOverlays[index];
                     return ListTile(
                       title: Text(
                         overlay.text,
@@ -757,12 +718,10 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
                       trailing: IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
                         onPressed: () {
-                          setState(() {
-                            _textOverlays.removeAt(index);
-                          });
+                          ref.read(textOverlayProvider.notifier).remove(overlay.id);
                         },
                       ),
-                      onTap: () => _editTextOverlay(index),
+                      onTap: () => _editTextOverlay(overlay),
                     );
                   },
                 ),
@@ -772,34 +731,61 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
   }
 }
 
-class TextOverlay {
-  final String text;
-  final Offset position;
-  final Color color;
-  final double fontSize;
-  final FontWeight fontWeight;
+class DraggableTextOverlay extends ConsumerStatefulWidget {
+  final TextOverlay overlay;
+  final Function(TextOverlay) onEdit;
 
-  TextOverlay({
-    required this.text,
-    required this.position,
-    required this.color,
-    required this.fontSize,
-    required this.fontWeight,
-  });
+  const DraggableTextOverlay({super.key, required this.overlay, required this.onEdit});
 
-  TextOverlay copyWith({
-    String? text,
-    Offset? position,
-    Color? color,
-    double? fontSize,
-    FontWeight? fontWeight,
-  }) {
-    return TextOverlay(
-      text: text ?? this.text,
-      position: position ?? this.position,
-      color: color ?? this.color,
-      fontSize: fontSize ?? this.fontSize,
-      fontWeight: fontWeight ?? this.fontWeight,
+  @override
+  ConsumerState<DraggableTextOverlay> createState() => _DraggableTextOverlayState();
+}
+
+class _DraggableTextOverlayState extends ConsumerState<DraggableTextOverlay> {
+  late Offset _position;
+
+  @override
+  void initState() {
+    super.initState();
+    _position = widget.overlay.position;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: _position.dx * MediaQuery.of(context).size.width - 100,
+      top: _position.dy * 300,
+      child: GestureDetector(
+        onTap: () {
+          widget.onEdit(widget.overlay);
+        },
+        onPanUpdate: (details) {
+          setState(() {
+            _position = Offset(
+              (details.globalPosition.dx) / MediaQuery.of(context).size.width,
+              (details.globalPosition.dy - 200) / 300,
+            );
+          });
+        },
+        onPanEnd: (_) {
+          ref.read(textOverlayProvider.notifier).update(widget.overlay.copyWith(position: _position));
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            widget.overlay.text,
+            style: GoogleFonts.poppins(
+              color: widget.overlay.color,
+              fontSize: widget.overlay.fontSize,
+              fontWeight: widget.overlay.fontWeight,
+            ),
+          ),
+        ),
+      ),
     );
   }
 } 

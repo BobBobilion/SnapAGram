@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 
-class SignupScreen extends StatefulWidget {
+class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
 
   @override
-  State<SignupScreen> createState() => _SignupScreenState();
+  ConsumerState<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _SignupScreenState extends State<SignupScreen> {
+class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -36,15 +36,12 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final authService = context.read<AuthService>();
-      
-      String username = _displayNameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final authService = ref.read(authServiceProvider);
       
       await authService.signUpWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         displayName: _displayNameController.text.trim(),
-        username: username,
       );
       
       if (mounted) {
@@ -77,7 +74,7 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isGoogleLoading = true);
 
     try {
-      final authService = context.read<AuthService>();
+      final authService = ref.read(authServiceProvider);
       await authService.signInWithGoogle();
       
       if (mounted) {
