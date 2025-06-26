@@ -61,7 +61,7 @@ class StorageService {
   }
   
   /// Upload user profile picture
-  static Future<String> uploadProfilePicture(File imageFile, String userId) async {
+  static Future<String> uploadProfilePicture(String userId, File imageFile) async {
     try {
       final String fileName = 'profile_$userId.jpg';
       final String filePath = 'profiles/$fileName';
@@ -89,6 +89,38 @@ class StorageService {
     } catch (e) {
       print('StorageService: Error uploading profile picture - $e');
       throw Exception('Failed to upload profile picture: $e');
+    }
+  }
+
+  /// Upload dog picture for owner profile
+  static Future<String> uploadDogPicture(String userId, File imageFile) async {
+    try {
+      final String fileName = 'dog_$userId.jpg';
+      final String filePath = 'dogs/$fileName';
+      
+      final Reference ref = _storage.ref().child(filePath);
+      
+      final UploadTask uploadTask = ref.putFile(
+        imageFile,
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {
+            'userId': userId,
+            'type': 'dog_picture',
+            'uploadedAt': DateTime.now().toIso8601String(),
+          },
+        ),
+      );
+      
+      final TaskSnapshot snapshot = await uploadTask;
+      final String downloadUrl = await snapshot.ref.getDownloadURL();
+      
+      print('StorageService: Dog picture uploaded successfully - $downloadUrl');
+      return downloadUrl;
+      
+    } catch (e) {
+      print('StorageService: Error uploading dog picture - $e');
+      throw Exception('Failed to upload dog picture: $e');
     }
   }
   

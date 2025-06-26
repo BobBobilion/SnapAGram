@@ -170,23 +170,23 @@ class _ExploreScreenState extends State<ExploreScreen>
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text(
-          'Explore',
+          'Walk Stories',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.blue[600],
+            color: const Color(0xFF6495ED),
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.blue[600],
+          labelColor: const Color(0xFF6495ED),
           unselectedLabelColor: Colors.grey[600],
-          indicatorColor: Colors.blue[600],
+          indicatorColor: const Color(0xFF6495ED),
           labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
           tabs: const [
-            Tab(text: 'Public'),
-            Tab(text: 'Friends'),
+            Tab(text: 'All Walks'),
+            Tab(text: 'My Connections'),
           ],
         ),
         actions: [
@@ -235,8 +235,8 @@ class _ExploreScreenState extends State<ExploreScreen>
         stories: _publicStories,
         isLoading: _isLoadingPublic,
         scrollController: _scrollController,
-        emptyMessage: 'No public stories yet',
-        emptySubMessage: 'Be the first to share a story!',
+        emptyMessage: 'No walk stories yet',
+        emptySubMessage: 'Walkers haven\'t shared any walks yet!',
         storyType: 'public',
       ),
     );
@@ -251,8 +251,8 @@ class _ExploreScreenState extends State<ExploreScreen>
         stories: _friendsStories,
         isLoading: _isLoadingFriends,
         scrollController: _friendsScrollController,
-        emptyMessage: 'No friends\' stories yet',
-        emptySubMessage: 'Your friends haven\'t posted any stories',
+        emptyMessage: 'No connection walks yet',
+        emptySubMessage: 'Your connections haven\'t shared any walk stories',
         storyType: 'friends',
       ),
     );
@@ -278,7 +278,7 @@ class _ExploreScreenState extends State<ExploreScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              storyType == 'friends' ? Icons.people_outline : Icons.photo_library_outlined,
+              storyType == 'friends' ? Icons.people_outline : Icons.pets,
               size: 64,
               color: Colors.grey[400],
             ),

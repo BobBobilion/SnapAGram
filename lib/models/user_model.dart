@@ -1,4 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'enums.dart';
+import 'walker_profile.dart';
+import 'owner_profile.dart';
 
 class UserModel {
   final String uid;
@@ -10,9 +13,10 @@ class UserModel {
   final DateTime createdAt;
   final DateTime lastSeen;
   final bool isOnline;
-  final List<String> friends;
-  final List<String> friendRequests; // incoming requests
-  final List<String> sentRequests; // outgoing requests
+  // DogWalk: Changed from friends to connections
+  final List<String> connections; // walker-owner connections
+  final List<String> connectionRequests; // incoming connection requests
+  final List<String> sentRequests; // outgoing connection requests
   final List<String> blockedUsers;
   final Map<String, dynamic> notificationSettings;
   final Map<String, dynamic> privacySettings;
@@ -20,7 +24,12 @@ class UserModel {
   final String? encryptedPrivateKey; // encrypted with user's password
   final Map<String, dynamic> chatDefaults; // default TTL settings
   final int storiesCount;
-  final int friendsCount;
+  final int connectionsCount; // renamed from friendsCount
+  // DogWalk: New role system
+  final UserRole role;
+  final WalkerProfile? walkerProfile;
+  final OwnerProfile? ownerProfile;
+  final bool isOnboardingComplete;
 
   UserModel({
     required this.uid,
@@ -32,8 +41,8 @@ class UserModel {
     required this.createdAt,
     required this.lastSeen,
     this.isOnline = false,
-    this.friends = const [],
-    this.friendRequests = const [],
+    this.connections = const [],
+    this.connectionRequests = const [],
     this.sentRequests = const [],
     this.blockedUsers = const [],
     this.notificationSettings = const {},
@@ -42,7 +51,11 @@ class UserModel {
     this.encryptedPrivateKey,
     this.chatDefaults = const {},
     this.storiesCount = 0,
-    this.friendsCount = 0,
+    this.connectionsCount = 0,
+    required this.role,
+    this.walkerProfile,
+    this.ownerProfile,
+    this.isOnboardingComplete = false,
   });
 
   // Convert to Firestore document
@@ -57,8 +70,8 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'lastSeen': Timestamp.fromDate(lastSeen),
       'isOnline': isOnline,
-      'friends': friends,
-      'friendRequests': friendRequests,
+      'connections': connections,
+      'connectionRequests': connectionRequests,
       'sentRequests': sentRequests,
       'blockedUsers': blockedUsers,
       'notificationSettings': notificationSettings.isNotEmpty 
@@ -73,7 +86,11 @@ class UserModel {
           ? chatDefaults 
           : _defaultChatSettings(),
       'storiesCount': storiesCount,
-      'friendsCount': friendsCount,
+      'connectionsCount': connectionsCount,
+      'role': role.name,
+      'walkerProfile': walkerProfile?.toMap(),
+      'ownerProfile': ownerProfile?.toMap(),
+      'isOnboardingComplete': isOnboardingComplete,
     };
   }
 
@@ -89,8 +106,8 @@ class UserModel {
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       lastSeen: (map['lastSeen'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isOnline: map['isOnline'] ?? false,
-      friends: List<String>.from(map['friends'] ?? []),
-      friendRequests: List<String>.from(map['friendRequests'] ?? []),
+      connections: List<String>.from(map['connections'] ?? map['friends'] ?? []), // backward compatibility
+      connectionRequests: List<String>.from(map['connectionRequests'] ?? map['friendRequests'] ?? []),
       sentRequests: List<String>.from(map['sentRequests'] ?? []),
       blockedUsers: List<String>.from(map['blockedUsers'] ?? []),
       notificationSettings: Map<String, dynamic>.from(map['notificationSettings'] ?? {}),
@@ -99,7 +116,18 @@ class UserModel {
       encryptedPrivateKey: map['encryptedPrivateKey'],
       chatDefaults: Map<String, dynamic>.from(map['chatDefaults'] ?? {}),
       storiesCount: map['storiesCount'] ?? 0,
-      friendsCount: map['friendsCount'] ?? 0,
+      connectionsCount: map['connectionsCount'] ?? map['friendsCount'] ?? 0,
+      role: UserRole.values.firstWhere(
+        (r) => r.name == map['role'],
+        orElse: () => UserRole.owner, // default to owner if not set
+      ),
+      walkerProfile: map['walkerProfile'] != null 
+          ? WalkerProfile.fromMap(map['walkerProfile']) 
+          : null,
+      ownerProfile: map['ownerProfile'] != null 
+          ? OwnerProfile.fromMap(map['ownerProfile']) 
+          : null,
+      isOnboardingComplete: map['isOnboardingComplete'] ?? false,
     );
   }
 
@@ -116,8 +144,8 @@ class UserModel {
     String? bio,
     DateTime? lastSeen,
     bool? isOnline,
-    List<String>? friends,
-    List<String>? friendRequests,
+    List<String>? connections,
+    List<String>? connectionRequests,
     List<String>? sentRequests,
     List<String>? blockedUsers,
     Map<String, dynamic>? notificationSettings,
@@ -126,7 +154,11 @@ class UserModel {
     String? encryptedPrivateKey,
     Map<String, dynamic>? chatDefaults,
     int? storiesCount,
-    int? friendsCount,
+    int? connectionsCount,
+    UserRole? role,
+    WalkerProfile? walkerProfile,
+    OwnerProfile? ownerProfile,
+    bool? isOnboardingComplete,
   }) {
     return UserModel(
       uid: uid,
@@ -138,8 +170,8 @@ class UserModel {
       createdAt: createdAt,
       lastSeen: lastSeen ?? this.lastSeen,
       isOnline: isOnline ?? this.isOnline,
-      friends: friends ?? this.friends,
-      friendRequests: friendRequests ?? this.friendRequests,
+      connections: connections ?? this.connections,
+      connectionRequests: connectionRequests ?? this.connectionRequests,
       sentRequests: sentRequests ?? this.sentRequests,
       blockedUsers: blockedUsers ?? this.blockedUsers,
       notificationSettings: notificationSettings ?? this.notificationSettings,
@@ -148,17 +180,51 @@ class UserModel {
       encryptedPrivateKey: encryptedPrivateKey ?? this.encryptedPrivateKey,
       chatDefaults: chatDefaults ?? this.chatDefaults,
       storiesCount: storiesCount ?? this.storiesCount,
-      friendsCount: friendsCount ?? this.friendsCount,
+      connectionsCount: connectionsCount ?? this.connectionsCount,
+      role: role ?? this.role,
+      walkerProfile: walkerProfile ?? this.walkerProfile,
+      ownerProfile: ownerProfile ?? this.ownerProfile,
+      isOnboardingComplete: isOnboardingComplete ?? this.isOnboardingComplete,
     );
+  }
+
+  // DogWalk-specific getters
+  bool get isWalker => role == UserRole.walker;
+  bool get isOwner => role == UserRole.owner;
+  
+  String get roleText => role == UserRole.walker ? 'Walker' : 'Owner';
+  
+  bool get hasCompleteProfile {
+    if (!isOnboardingComplete) return false;
+    if (isWalker && walkerProfile == null) return false;
+    if (isOwner && ownerProfile == null) return false;
+    return true;
+  }
+
+  String? get city {
+    if (isWalker) return walkerProfile?.city;
+    if (isOwner) return ownerProfile?.city;
+    return null;
+  }
+
+  double? get rating {
+    if (isWalker) return walkerProfile?.averageRating;
+    return null;
+  }
+
+  int? get totalReviews {
+    if (isWalker) return walkerProfile?.totalReviews;
+    return null;
   }
 
   // Default settings
   static Map<String, dynamic> _defaultNotificationSettings() {
     return {
       'newMessages': true,
-      'friendRequests': true,
-      'storyLikes': false,
-      'storyShares': false,
+      'connectionRequests': true,
+      'walkRequests': true,
+      'walkUpdates': true,
+      'reviews': true,
       'soundEnabled': true,
       'vibrationEnabled': true,
       'quietHours': {
@@ -171,14 +237,12 @@ class UserModel {
 
   static Map<String, dynamic> _defaultPrivacySettings() {
     return {
-      'profileVisibility': 'friends', // 'public', 'friends', 'private'
-      'storyVisibility': 'friends', // 'public', 'friends'
-      'allowFriendRequests': true,
-      'allowMessageRequests': true,
+      'profileVisibility': 'public', // 'public', 'connections', 'private'
       'showOnlineStatus': true,
       'showLastSeen': true,
-      'allowStoriesScreenshot': true,
-      'allowMessagesScreenshot': true,
+      'allowConnectionRequests': true,
+      'allowMessageRequests': true,
+      'showLocation': true, // for matching algorithm
     };
   }
 
@@ -193,7 +257,7 @@ class UserModel {
 
   @override
   String toString() {
-    return 'UserModel(uid: $uid, email: $email, displayName: $displayName, handle: $handle)';
+    return 'UserModel(uid: $uid, email: $email, displayName: $displayName, handle: $handle, role: $role)';
   }
 
   @override

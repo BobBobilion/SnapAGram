@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
 import '../models/user_model.dart';
+import '../models/enums.dart';
+import '../models/walker_profile.dart';
+import '../models/owner_profile.dart';
 
 class UserDatabaseService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -105,6 +108,8 @@ class UserDatabaseService {
         createdAt: now,
         lastSeen: now,
         isOnline: true,
+        role: UserRole.owner, // Default to owner, will be updated during onboarding
+        isOnboardingComplete: false, // Ensure onboarding is marked as incomplete
       );
 
       // Use batch write for atomic operation
@@ -165,12 +170,20 @@ class UserDatabaseService {
   // Update online status
   static Future<void> updateOnlineStatus(String uid, bool isOnline) async {
     try {
+      // Check if user document exists first
+      final doc = await _usersCollection.doc(uid).get();
+      if (!doc.exists) {
+        print('UserDatabaseService: User document does not exist for UID: $uid');
+        return; // Don't throw error, just return silently
+      }
+      
       await _usersCollection.doc(uid).update({
         'isOnline': isOnline,
         'lastSeen': Timestamp.fromDate(DateTime.now()),
       });
     } catch (e) {
-      throw Exception('Failed to update online status: $e');
+      print('UserDatabaseService: Error updating online status: $e');
+      // Don't throw error for online status updates as it's not critical
     }
   }
 
@@ -278,8 +291,8 @@ class UserDatabaseService {
     }
   }
 
-  // Send friend request
-  static Future<void> sendFriendRequest(String currentUserId, String targetUserId) async {
+  // Send connection request (was friend request)
+  static Future<void> sendConnectionRequest(String currentUserId, String targetUserId) async {
     try {
       final batch = _firestore.batch();
       
@@ -288,83 +301,83 @@ class UserDatabaseService {
         'sentRequests': FieldValue.arrayUnion([targetUserId])
       });
       
-      // Add to target user's friend requests
+      // Add to target user's connection requests
       batch.update(_usersCollection.doc(targetUserId), {
-        'friendRequests': FieldValue.arrayUnion([currentUserId])
+        'connectionRequests': FieldValue.arrayUnion([currentUserId])
       });
       
       await batch.commit();
     } catch (e) {
-      throw Exception('Failed to send friend request: $e');
+      throw Exception('Failed to send connection request: $e');
     }
   }
 
-  // Accept friend request
-  static Future<void> acceptFriendRequest(String currentUserId, String fromUserId) async {
+  // Accept connection request (was friend request)
+  static Future<void> acceptConnectionRequest(String currentUserId, String fromUserId) async {
     try {
       final batch = _firestore.batch();
       
       // Update current user
       batch.update(_usersCollection.doc(currentUserId), {
-        'friends': FieldValue.arrayUnion([fromUserId]),
-        'friendRequests': FieldValue.arrayRemove([fromUserId]),
-        'friendsCount': FieldValue.increment(1),
+        'connections': FieldValue.arrayUnion([fromUserId]),
+        'connectionRequests': FieldValue.arrayRemove([fromUserId]),
+        'connectionsCount': FieldValue.increment(1),
       });
       
-      // Update friend user
+      // Update connecting user
       batch.update(_usersCollection.doc(fromUserId), {
-        'friends': FieldValue.arrayUnion([currentUserId]),
+        'connections': FieldValue.arrayUnion([currentUserId]),
         'sentRequests': FieldValue.arrayRemove([currentUserId]),
-        'friendsCount': FieldValue.increment(1),
+        'connectionsCount': FieldValue.increment(1),
       });
       
       await batch.commit();
     } catch (e) {
-      throw Exception('Failed to accept friend request: $e');
+      throw Exception('Failed to accept connection request: $e');
     }
   }
 
-  // Reject friend request
-  static Future<void> rejectFriendRequest(String currentUserId, String fromUserId) async {
+  // Reject connection request (was friend request)
+  static Future<void> rejectConnectionRequest(String currentUserId, String fromUserId) async {
     try {
       final batch = _firestore.batch();
       
-      // Remove from current user's friend requests
+      // Remove from current user's connection requests
       batch.update(_usersCollection.doc(currentUserId), {
-        'friendRequests': FieldValue.arrayRemove([fromUserId])
+        'connectionRequests': FieldValue.arrayRemove([fromUserId])
       });
       
-      // Remove from friend user's sent requests
+      // Remove from connecting user's sent requests
       batch.update(_usersCollection.doc(fromUserId), {
         'sentRequests': FieldValue.arrayRemove([currentUserId])
       });
       
       await batch.commit();
     } catch (e) {
-      throw Exception('Failed to reject friend request: $e');
+      throw Exception('Failed to reject connection request: $e');
     }
   }
 
-  // Remove friend
-  static Future<void> removeFriend(String currentUserId, String friendId) async {
+  // Remove connection (was friend)
+  static Future<void> removeConnection(String currentUserId, String connectionId) async {
     try {
       final batch = _firestore.batch();
       
       // Update current user
       batch.update(_usersCollection.doc(currentUserId), {
-        'friends': FieldValue.arrayRemove([friendId]),
-        'friendsCount': FieldValue.increment(-1),
+        'connections': FieldValue.arrayRemove([connectionId]),
+        'connectionsCount': FieldValue.increment(-1),
       });
       
-      // Update friend user
-      batch.update(_usersCollection.doc(friendId), {
-        'friends': FieldValue.arrayRemove([currentUserId]),
-        'friendsCount': FieldValue.increment(-1),
+      // Update connection user
+      batch.update(_usersCollection.doc(connectionId), {
+        'connections': FieldValue.arrayRemove([currentUserId]),
+        'connectionsCount': FieldValue.increment(-1),
       });
       
       await batch.commit();
     } catch (e) {
-      throw Exception('Failed to remove friend: $e');
+      throw Exception('Failed to remove connection: $e');
     }
   }
 
@@ -376,15 +389,15 @@ class UserDatabaseService {
       // Add to blocked users
       batch.update(_usersCollection.doc(currentUserId), {
         'blockedUsers': FieldValue.arrayUnion([userIdToBlock]),
-        'friends': FieldValue.arrayRemove([userIdToBlock]),
-        'friendRequests': FieldValue.arrayRemove([userIdToBlock]),
+        'connections': FieldValue.arrayRemove([userIdToBlock]),
+        'connectionRequests': FieldValue.arrayRemove([userIdToBlock]),
         'sentRequests': FieldValue.arrayRemove([userIdToBlock]),
       });
       
-      // Remove from blocked user's friends and requests
+      // Remove from blocked user's connections and requests
       batch.update(_usersCollection.doc(userIdToBlock), {
-        'friends': FieldValue.arrayRemove([currentUserId]),
-        'friendRequests': FieldValue.arrayRemove([currentUserId]),
+        'connections': FieldValue.arrayRemove([currentUserId]),
+        'connectionRequests': FieldValue.arrayRemove([currentUserId]),
         'sentRequests': FieldValue.arrayRemove([currentUserId]),
       });
       
@@ -394,39 +407,39 @@ class UserDatabaseService {
     }
   }
 
-  // Get user's friends
-  static Future<List<UserModel>> getUserFriends(String userId) async {
+  // Get user's connections (was friends)
+  static Future<List<UserModel>> getUserConnections(String userId) async {
     try {
       final user = await getUserById(userId);
-      if (user == null || user.friends.isEmpty) return [];
+      if (user == null || user.connections.isEmpty) return [];
       
-      final friendsSnapshot = await _usersCollection
-          .where(FieldPath.documentId, whereIn: user.friends)
+      final connectionsSnapshot = await _usersCollection
+          .where(FieldPath.documentId, whereIn: user.connections)
           .get();
       
-      return friendsSnapshot.docs
+      return connectionsSnapshot.docs
           .map((doc) => UserModel.fromSnapshot(doc))
           .toList();
     } catch (e) {
-      throw Exception('Failed to get user friends: $e');
+      throw Exception('Failed to get user connections: $e');
     }
   }
 
-  // Get friend requests
-  static Future<List<UserModel>> getFriendRequests(String userId) async {
+  // Get connection requests (was friend requests)
+  static Future<List<UserModel>> getConnectionRequests(String userId) async {
     try {
       final user = await getUserById(userId);
-      if (user == null || user.friendRequests.isEmpty) return [];
+      if (user == null || user.connectionRequests.isEmpty) return [];
       
       final requestsSnapshot = await _usersCollection
-          .where(FieldPath.documentId, whereIn: user.friendRequests)
+          .where(FieldPath.documentId, whereIn: user.connectionRequests)
           .get();
       
       return requestsSnapshot.docs
           .map((doc) => UserModel.fromSnapshot(doc))
           .toList();
     } catch (e) {
-      throw Exception('Failed to get friend requests: $e');
+      throw Exception('Failed to get connection requests: $e');
     }
   }
 
@@ -455,19 +468,19 @@ class UserDatabaseService {
     });
   }
 
-  // Listen to friends updates
-  static Stream<List<UserModel>> listenToFriends(String userId) {
+  // Listen to connections updates (was friends updates)
+  static Stream<List<UserModel>> listenToConnections(String userId) {
     return _usersCollection.doc(userId).snapshots().asyncMap((snapshot) async {
       if (!snapshot.exists) return [];
       
       final user = UserModel.fromSnapshot(snapshot);
-      if (user.friends.isEmpty) return [];
+      if (user.connections.isEmpty) return [];
       
-      final friendsSnapshot = await _usersCollection
-          .where(FieldPath.documentId, whereIn: user.friends)
+      final connectionsSnapshot = await _usersCollection
+          .where(FieldPath.documentId, whereIn: user.connections)
           .get();
       
-      return friendsSnapshot.docs
+      return connectionsSnapshot.docs
           .map((doc) => UserModel.fromSnapshot(doc))
           .toList();
     });
@@ -530,43 +543,43 @@ class UserDatabaseService {
     }
   }
 
-  // Fix friends count by recalculating from friends array
-  static Future<void> fixFriendsCount(String userId) async {
+  // Fix connections count by recalculating from connections array
+  static Future<void> fixConnectionsCount(String userId) async {
     try {
       final user = await getUserById(userId);
       if (user == null) return;
       
-      final actualFriendsCount = user.friends.length;
+      final actualConnectionsCount = user.connections.length;
       
-      if (actualFriendsCount != user.friendsCount) {
+      if (actualConnectionsCount != user.connectionsCount) {
         await _usersCollection.doc(userId).update({
-          'friendsCount': actualFriendsCount,
+          'connectionsCount': actualConnectionsCount,
         });
-        print('Fixed friends count for user $userId: was ${user.friendsCount}, now $actualFriendsCount');
+        print('Fixed connections count for user $userId: was ${user.connectionsCount}, now $actualConnectionsCount');
       }
     } catch (e) {
-      throw Exception('Failed to fix friends count: $e');
+      throw Exception('Failed to fix connections count: $e');
     }
   }
 
-  // Fix friends count for all users (admin function)
-  static Future<void> fixAllFriendsCounts() async {
+  // Fix connections count for all users (admin function)
+  static Future<void> fixAllConnectionsCounts() async {
     try {
       final usersSnapshot = await _usersCollection.get();
       
       for (final doc in usersSnapshot.docs) {
         final user = UserModel.fromSnapshot(doc);
-        final actualFriendsCount = user.friends.length;
+        final actualConnectionsCount = user.connections.length;
         
-        if (actualFriendsCount != user.friendsCount) {
+        if (actualConnectionsCount != user.connectionsCount) {
           await _usersCollection.doc(user.uid).update({
-            'friendsCount': actualFriendsCount,
+            'connectionsCount': actualConnectionsCount,
           });
-          print('Fixed friends count for user ${user.uid}: was ${user.friendsCount}, now $actualFriendsCount');
+          print('Fixed connections count for user ${user.uid}: was ${user.connectionsCount}, now $actualConnectionsCount');
         }
       }
     } catch (e) {
-      throw Exception('Failed to fix all friends counts: $e');
+      throw Exception('Failed to fix all connections counts: $e');
     }
   }
 
@@ -598,6 +611,204 @@ class UserDatabaseService {
       await batch.commit();
     } catch (e) {
       throw Exception('Failed to migrate user to handle: $e');
+    }
+  }
+
+  // Check if current user is connected to another user
+  static bool isConnectedTo(UserModel? currentUser, String userId) {
+    return currentUser?.connections.contains(userId) ?? false;
+  }
+
+  // Check if current user has a pending request to another user
+  static bool hasPendingRequestTo(UserModel? currentUser, String userId) {
+    return currentUser?.sentRequests.contains(userId) ?? false;
+  }
+
+  // Check if current user has received a request from another user
+  static bool hasRequestFrom(UserModel? currentUser, String userId) {
+    return currentUser?.connectionRequests.contains(userId) ?? false;
+  }
+
+  // Complete user onboarding with comprehensive profile data
+  static Future<void> completeUserOnboarding(
+    String uid, {
+    required String displayName,
+    required String handle,
+    String? bio,
+    String? profilePictureUrl,
+    required UserRole role,
+    WalkerProfile? walkerProfile,
+    OwnerProfile? ownerProfile,
+  }) async {
+    try {
+      // Ensure handle is properly formatted
+      String formattedHandle = handle.startsWith('@') ? handle : '@$handle';
+      
+      // Check if handle is available (excluding current user)
+      final isAvailable = await isHandleAvailable(formattedHandle, excludeUserId: uid);
+      if (!isAvailable) {
+        // Generate a new unique handle
+        formattedHandle = await generateUniqueHandle(displayName, excludeUserId: uid);
+      }
+      
+      final batch = _firestore.batch();
+      final now = DateTime.now();
+      
+      // Check if user document exists
+      final existingDoc = await _usersCollection.doc(uid).get();
+      
+      // Create complete user document (in case it doesn't exist)
+      final userData = <String, dynamic>{
+        'uid': uid,
+        'email': _auth.currentUser?.email ?? '',
+        'displayName': displayName,
+        'handle': formattedHandle,
+        'bio': bio ?? '',
+        'profilePictureUrl': profilePictureUrl,
+        'createdAt': existingDoc.exists 
+            ? (existingDoc.data() as Map<String, dynamic>)['createdAt'] 
+            : Timestamp.fromDate(now),
+        'lastSeen': Timestamp.fromDate(now),
+        'isOnline': true,
+        'connections': [],
+        'connectionRequests': [],
+        'sentRequests': [],
+        'blockedUsers': [],
+        'notificationSettings': {},
+        'privacySettings': {},
+        'chatDefaults': {},
+        'storiesCount': 0,
+        'connectionsCount': 0,
+        'role': role.name,
+        'isOnboardingComplete': true,
+      };
+      
+      // Add role-specific profile data
+      if (role == UserRole.walker && walkerProfile != null) {
+        userData['walkerProfile'] = walkerProfile.toMap();
+        userData['ownerProfile'] = null;
+      } else if (role == UserRole.owner && ownerProfile != null) {
+        userData['ownerProfile'] = ownerProfile.toMap();
+        userData['walkerProfile'] = null;
+      }
+      
+      // Use set instead of update to create document if it doesn't exist
+      batch.set(_usersCollection.doc(uid), userData);
+      
+      // Update handle reservation
+      batch.set(_handlesCollection.doc(formattedHandle.toLowerCase()), {
+        'uid': uid,
+        'createdAt': Timestamp.fromDate(now),
+      });
+      
+      await batch.commit();
+    } catch (e) {
+      throw Exception('Failed to complete user onboarding: $e');
+    }
+  }
+
+  // Legacy method names for backward compatibility (will be removed)
+  @deprecated
+  static Future<void> sendFriendRequest(String currentUserId, String targetUserId) async {
+    return sendConnectionRequest(currentUserId, targetUserId);
+  }
+
+  @deprecated
+  static Future<void> acceptFriendRequest(String currentUserId, String fromUserId) async {
+    return acceptConnectionRequest(currentUserId, fromUserId);
+  }
+
+  @deprecated
+  static Future<void> rejectFriendRequest(String currentUserId, String fromUserId) async {
+    return rejectConnectionRequest(currentUserId, fromUserId);
+  }
+
+  @deprecated
+  static Future<void> removeFriend(String currentUserId, String friendId) async {
+    return removeConnection(currentUserId, friendId);
+  }
+
+  @deprecated
+  static Future<List<UserModel>> getUserFriends(String userId) async {
+    return getUserConnections(userId);
+  }
+
+  @deprecated
+  static Future<List<UserModel>> getFriendRequests(String userId) async {
+    return getConnectionRequests(userId);
+  }
+
+  @deprecated
+  static Stream<List<UserModel>> listenToFriends(String userId) {
+    return listenToConnections(userId);
+  }
+
+  @deprecated
+  static Future<void> fixFriendsCount(String userId) async {
+    return fixConnectionsCount(userId);
+  }
+
+  @deprecated
+  static Future<void> fixAllFriendsCounts() async {
+    return fixAllConnectionsCounts();
+  }
+
+  // Delete all user data (used for account deletion)
+  static Future<void> deleteUserData(String userId) async {
+    try {
+      final user = await getUserById(userId);
+      if (user == null) return; // User doesn't exist in Firestore
+      
+      final batch = _firestore.batch();
+      
+      // Delete user document
+      batch.delete(_usersCollection.doc(userId));
+      
+      // Delete handle reservation
+      if (user.handle.isNotEmpty) {
+        batch.delete(_handlesCollection.doc(user.handle.toLowerCase()));
+      }
+      
+      // Remove user from all connections' connection lists
+      if (user.connections.isNotEmpty) {
+        for (final connectionId in user.connections) {
+          batch.update(_usersCollection.doc(connectionId), {
+            'connections': FieldValue.arrayRemove([userId]),
+            'connectionsCount': FieldValue.increment(-1),
+          });
+        }
+      }
+      
+      // Remove user from all pending connection requests
+      if (user.connectionRequests.isNotEmpty) {
+        for (final requesterId in user.connectionRequests) {
+          batch.update(_usersCollection.doc(requesterId), {
+            'sentRequests': FieldValue.arrayRemove([userId]),
+          });
+        }
+      }
+      
+      // Remove user from all sent connection requests
+      if (user.sentRequests.isNotEmpty) {
+        for (final targetId in user.sentRequests) {
+          batch.update(_usersCollection.doc(targetId), {
+            'connectionRequests': FieldValue.arrayRemove([userId]),
+          });
+        }
+      }
+      
+      await batch.commit();
+      
+      // TODO: Add cleanup for other collections when implemented:
+      // - Delete user's stories from stories collection
+      // - Delete user's chats and messages
+      // - Delete user's walk sessions and reviews
+      // - Delete user's photos from Firebase Storage
+      
+      print('Successfully deleted user data for $userId');
+    } catch (e) {
+      print('Error deleting user data for $userId: $e');
+      throw Exception('Failed to delete user data: $e');
     }
   }
 } 

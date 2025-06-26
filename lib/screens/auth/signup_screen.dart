@@ -50,11 +50,12 @@ class _SignupScreenState extends State<SignupScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Sign up successful!'),
-            duration: const Duration(milliseconds: 500),
+            content: Text('Account created! Setting up your profile...'),
+            duration: const Duration(milliseconds: 1500),
           ),
         );
-        Navigator.pop(context);
+        // Don't use Navigator.pop() - let AuthWrapper handle navigation to onboarding
+        // The auth state change will automatically trigger navigation
       }
     } catch (e) {
       if (mounted) {
@@ -80,7 +81,8 @@ class _SignupScreenState extends State<SignupScreen> {
       await authService.signInWithGoogle();
       
       if (mounted) {
-        Navigator.pop(context);
+        // Don't use Navigator.pop() - let AuthWrapper handle navigation to onboarding
+        // The auth state change will automatically trigger navigation
       }
     } catch (e) {
       if (mounted) {
@@ -126,24 +128,39 @@ class _SignupScreenState extends State<SignupScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // App Logo/Title
-                  Icon(
-                    Icons.camera_alt_rounded,
-                    size: 80,
-                    color: Colors.blue[600],
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6495ED),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6495ED).withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.pets,
+                      color: Colors.white,
+                      size: 40,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Create Account',
+                    'Join DogWalk',
                     style: GoogleFonts.poppins(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue[600],
+                      color: const Color(0xFF6495ED),
                     ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Join SnapAGram today!',
+                    'Connect with dog walkers in your area',
                     style: GoogleFonts.poppins(
                       fontSize: 16,
                       color: Colors.grey[600],

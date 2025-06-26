@@ -32,8 +32,8 @@ class StoryDatabaseService {
       
       // For friends-only stories, set allowedViewers to the user's friends list if not provided
       List<String> finalAllowedViewers = allowedViewers;
-      if (visibility == StoryVisibility.friends && allowedViewers.isEmpty) {
-        finalAllowedViewers = user.friends;
+          if (visibility == StoryVisibility.friends && allowedViewers.isEmpty) {
+      finalAllowedViewers = user.connections;
       }
       
       final storyId = _storiesCollection.doc().id;
@@ -133,14 +133,14 @@ class StoryDatabaseService {
   }) async {
     try {
       final user = await UserDatabaseService.getUserById(userId);
-      if (user == null || user.friends.isEmpty) return [];
+      if (user == null || user.connections.isEmpty) return [];
 
       final stories = <StoryModel>[];
       final storyIds = <String>{};
 
-      // Only include friends' stories, not the user's own stories
+      // Only include connections' stories, not the user's own stories
       Query query = _storiesCollection
-          .where('uid', whereIn: user.friends)
+          .where('uid', whereIn: user.connections)
           .where('expiresAt', isGreaterThan: Timestamp.fromDate(DateTime.now()))
           .orderBy('expiresAt')
           .orderBy('createdAt', descending: true)
@@ -447,11 +447,11 @@ class StoryDatabaseService {
       
       final user = UserModel.fromSnapshot(userSnapshot);
       
-      // Only include friends' stories, not the user's own stories
-      if (user.friends.isEmpty) return <StoryModel>[];
+      // Only include connections' stories, not the user's own stories
+      if (user.connections.isEmpty) return <StoryModel>[];
 
       final snapshot = await _storiesCollection
-          .where('uid', whereIn: user.friends)
+          .where('uid', whereIn: user.connections)
           .where('expiresAt', isGreaterThan: Timestamp.fromDate(DateTime.now()))
           .orderBy('expiresAt')
           .orderBy('createdAt', descending: true)

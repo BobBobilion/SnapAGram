@@ -137,24 +137,39 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // App Logo/Title
-                  Icon(
-                    Icons.camera_alt_rounded,
-                    size: 80,
-                    color: Colors.blue[600],
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6495ED),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6495ED).withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.pets,
+                      color: Colors.white,
+                      size: 40,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'SnapAGram',
+                    'DogWalk',
                     style: GoogleFonts.poppins(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue[600],
+                      color: const Color(0xFF6495ED),
                     ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Welcome back!',
+                    'Connect dogs and walkers',
                     style: GoogleFonts.poppins(
                       fontSize: 16,
                       color: Colors.grey[600],

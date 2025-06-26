@@ -21,8 +21,9 @@ class _HomeScreenState extends State<HomeScreen> {
   late List<Widget> _screens;
   late PageController _pageController;
 
-  // Define the accent blue color from PRD
-  static const Color accentBlue = Color(0xFF2196F3);
+  // Define the accent colors for DogWalk - blue theme
+  static const Color accentBlue = Color(0xFF6495ED); // Cornflower blue
+  static const Color accentLightBlue = Color(0xFF87CEEB); // Sky blue
 
   @override
   void initState() {
@@ -117,30 +118,30 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                // Explore Tab
+                // Stories Tab (Walk Stories)
                 _buildTabItem(
-                  icon: Icons.explore,
-                  label: 'Explore',
+                  icon: Icons.auto_stories,
+                  label: 'Stories',
                   index: 0,
                 ),
-                // Friends Tab
+                // Find Tab (Walker-Owner Matching)
                 _buildTabItem(
-                  icon: Icons.people,
-                  label: 'Friends',
+                  icon: Icons.search,
+                  label: 'Find',
                   index: 1,
                 ),
-                // Camera Button (integrated into nav bar)
+                // Camera Button (Walk Photos)
                 _buildCameraButton(),
-                // Chats Tab
+                // Chats Tab (Walker-Owner Communication)
                 _buildTabItem(
                   icon: Icons.chat_bubble_outline,
                   label: 'Chats',
                   index: 3,
                 ),
-                // Account Tab
+                // Profile Tab (Role-based Profiles)
                 _buildTabItem(
                   icon: Icons.person_outline,
-                  label: 'Account',
+                  label: 'Profile',
                   index: 4,
                 ),
               ],
@@ -194,20 +195,20 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
+                  Icon(
+          icon,
+          color: isSelected ? accentBlue : Colors.grey[600],
+          size: 24,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
             color: isSelected ? accentBlue : Colors.grey[600],
-            size: 24,
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-              color: isSelected ? accentBlue : Colors.grey[600],
-            ),
-          ),
+        ),
         ],
       ),
     );

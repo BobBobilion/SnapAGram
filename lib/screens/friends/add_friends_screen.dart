@@ -452,7 +452,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> {
 
   Widget _buildUserCard(UserModel user) {
     final hasSentInvite = _sentInvites.contains(user.uid);
-    final isAlreadyFriend = _serviceManager.currentUser?.friends.contains(user.uid) ?? false;
+          final isAlreadyFriend = _serviceManager.currentUser?.connections.contains(user.uid) ?? false;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),

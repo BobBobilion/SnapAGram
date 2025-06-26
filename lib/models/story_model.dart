@@ -25,6 +25,13 @@ class StoryModel {
   final String? encryptedKey; // encryption key for friends-only stories
   final List<String> allowedViewers; // uids who can view (for friends-only)
   final Map<String, dynamic> metadata; // additional data
+  // DogWalk: Walk story specific fields
+  final String? walkSessionId; // Link to walk session
+  final String? location; // City/area where walk happened
+  final int? walkDuration; // Walk duration in minutes
+  final double? walkDistance; // Walk distance in kilometers
+  final String? dogSize; // Size of dog walked (small, medium, large)
+  final String? dogName; // Name of dog walked
 
   StoryModel({
     required this.id,
@@ -48,6 +55,13 @@ class StoryModel {
     this.encryptedKey,
     this.allowedViewers = const [],
     this.metadata = const {},
+    // DogWalk fields
+    this.walkSessionId,
+    this.location,
+    this.walkDuration,
+    this.walkDistance,
+    this.dogSize,
+    this.dogName,
   });
 
   // Convert to Firestore document
@@ -74,6 +88,13 @@ class StoryModel {
       'encryptedKey': encryptedKey,
       'allowedViewers': allowedViewers,
       'metadata': metadata,
+      // DogWalk fields
+      'walkSessionId': walkSessionId,
+      'location': location,
+      'walkDuration': walkDuration,
+      'walkDistance': walkDistance,
+      'dogSize': dogSize,
+      'dogName': dogName,
     };
   }
 
@@ -107,6 +128,13 @@ class StoryModel {
       encryptedKey: map['encryptedKey'],
       allowedViewers: List<String>.from(map['allowedViewers'] ?? []),
       metadata: Map<String, dynamic>.from(map['metadata'] ?? {}),
+      // DogWalk fields
+      walkSessionId: map['walkSessionId'],
+      location: map['location'],
+      walkDuration: map['walkDuration'],
+      walkDistance: map['walkDistance']?.toDouble(),
+      dogSize: map['dogSize'],
+      dogName: map['dogName'],
     );
   }
 
@@ -132,6 +160,13 @@ class StoryModel {
     String? encryptedKey,
     List<String>? allowedViewers,
     Map<String, dynamic>? metadata,
+    // DogWalk fields
+    String? walkSessionId,
+    String? location,
+    int? walkDuration,
+    double? walkDistance,
+    String? dogSize,
+    String? dogName,
   }) {
     return StoryModel(
       id: id,
@@ -155,6 +190,13 @@ class StoryModel {
       encryptedKey: encryptedKey ?? this.encryptedKey,
       allowedViewers: allowedViewers ?? this.allowedViewers,
       metadata: metadata ?? this.metadata,
+      // DogWalk fields
+      walkSessionId: walkSessionId ?? this.walkSessionId,
+      location: location ?? this.location,
+      walkDuration: walkDuration ?? this.walkDuration,
+      walkDistance: walkDistance ?? this.walkDistance,
+      dogSize: dogSize ?? this.dogSize,
+      dogName: dogName ?? this.dogName,
     );
   }
 

@@ -30,7 +30,7 @@ class _AccountScreenState extends State<AccountScreen> {
           'Account',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.blue[600],
+            color: const Color(0xFF6495ED),
           ),
         ),
         backgroundColor: Colors.white,
@@ -242,7 +242,7 @@ class _AccountScreenState extends State<AccountScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildStatItem('Stories', userModel?.storiesCount.toString() ?? '0'),
-                    _buildStatItem('Friends', userModel?.friendsCount.toString() ?? '0'),
+                    _buildStatItem('Connections', userModel?.connectionsCount.toString() ?? '0'),
                     _buildStatItem('Member Since', _formatDate(createdAt)),
                   ],
                 ),
@@ -336,7 +336,7 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Widget _buildQuickStats(UserModel? userModel) {
-    final friendsCount = userModel?.friendsCount ?? 0;
+    final connectionsCount = userModel?.connectionsCount ?? 0;
     final storiesCount = userModel?.storiesCount ?? 0;
     final lastSeen = userModel?.lastSeen;
     final isOnline = userModel?.isOnline ?? false;
@@ -346,8 +346,8 @@ class _AccountScreenState extends State<AccountScreen> {
         Expanded(
           child: _buildQuickStatCard(
             icon: Icons.people,
-            title: 'Friends',
-            value: friendsCount.toString(),
+            title: 'Connections',
+            value: connectionsCount.toString(),
             color: Colors.blue,
           ),
         ),
@@ -376,7 +376,7 @@ class _AccountScreenState extends State<AccountScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: InkWell(
-        onTap: title == 'Friends' ? _navigateToFriendsTab : 
+        onTap: title == 'Connections' ? _navigateToFriendsTab : 
                title == 'Stories' ? _navigateToMyStories : null,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -499,6 +499,8 @@ class _AccountScreenState extends State<AccountScreen> {
             );
           },
         ),
+        const SizedBox(height: 16),
+        _buildDeleteAccountCard(),
       ],
     );
   }
@@ -612,19 +614,197 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
+  Widget _buildDeleteAccountCard() {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        leading: Icon(
+          Icons.delete_forever,
+          color: Colors.red[600],
+        ),
+        title: Text(
+          'Delete Account',
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.red[600],
+          ),
+        ),
+        subtitle: Text(
+          'Permanently delete your account and all data',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            color: Colors.grey[600],
+          ),
+        ),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+          color: Colors.red[400],
+        ),
+        onTap: () => _showDeleteAccountDialog(context),
+      ),
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context) {
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.warning,
+                    color: Colors.red[600],
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Delete Account',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red[600],
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'This action cannot be undone. All your data will be permanently deleted:',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '• Your profile and account information\n'
+                    '• All your walk stories and photos\n'
+                    '• Your connections and chat history\n'
+                    '• All walk session data',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Are you sure you want to delete your account?',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.of(context).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.poppins(color: Colors.grey[600]),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading 
+                      ? null 
+                      : () async {
+                          setState(() => isLoading = true);
+
+                          try {
+                            final authService = context.read<AuthService>();
+                            await authService.deleteAccount();
+                            
+                            if (context.mounted) {
+                              Navigator.of(context).pop(); // Close dialog
+                              
+                              // Show success message and navigate to login
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Account deleted successfully'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                              
+                              // Navigate to login screen and clear navigation stack
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                (route) => false,
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              setState(() => isLoading = false);
+                              
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error deleting account: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[600],
+                    foregroundColor: Colors.white,
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Text(
+                          'Delete Forever',
+                          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showAboutDialog(BuildContext context) {
     showAboutDialog(
       context: context,
-      applicationName: 'SnapAGram',
+      applicationName: 'DogWalk',
       applicationVersion: '1.0.0',
-      applicationIcon: Icon(
-        Icons.camera_alt,
-        size: 48,
-        color: Colors.blue[600],
+      applicationIcon: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: const Color(0xFF6495ED),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(
+          Icons.pets,
+          color: Colors.white,
+          size: 28,
+        ),
       ),
       children: [
         Text(
-          'SnapAGram is a camera-first social messaging app that lets friends share photos and videos with fine-grained control over snap lifetime.',
+          'DogWalk connects dog owners with trusted walkers in their area. Track walks in real-time, share photos, and build lasting connections.',
           style: GoogleFonts.poppins(),
         ),
       ],
@@ -656,7 +836,13 @@ class _AccountScreenState extends State<AccountScreen> {
               onPressed: () async {
                 Navigator.of(context).pop();
                 await context.read<AuthService>().signOut();
-                // Let AuthWrapper handle the navigation automatically
+                // After signing out, navigate to the login screen and clear the navigation stack
+                if (context.mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+                  );
+                }
               },
               child: Text(
                 'Sign Out',

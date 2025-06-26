@@ -174,22 +174,22 @@ class _FriendsScreenState extends State<FriendsScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text(
-          'Friends',
+          'Find',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.blue[600],
+            color: const Color(0xFF6495ED),
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
         actions: [
-          // Friend Requests Notification Icon
+          // Connection Requests Notification Icon
           Stack(
             children: [
               IconButton(
                 icon: Icon(
                   Icons.notifications,
-                  color: _friendRequests.isNotEmpty ? Colors.blue[600] : Colors.grey[600],
+                  color: _friendRequests.isNotEmpty ? const Color(0xFF6495ED) : Colors.grey[600],
                 ),
                 onPressed: _showFriendRequests,
               ),
@@ -223,7 +223,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: IconButton(
-              icon: const Icon(Icons.person_add),
+              icon: const Icon(Icons.search),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -302,13 +302,13 @@ class _FriendsScreenState extends State<FriendsScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                Icons.people_outline,
+                                Icons.pets,
                                 size: 64,
                                 color: Colors.grey[400],
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'No friends yet',
+                                'No connections yet',
                                 style: GoogleFonts.poppins(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w500,
@@ -317,7 +317,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Pull down to refresh or add friends',
+                                'Search for walkers or dog owners to connect',
                                 style: GoogleFonts.poppins(
                                   fontSize: 14,
                                   color: Colors.grey[500],
@@ -333,10 +333,10 @@ class _FriendsScreenState extends State<FriendsScreen> {
                                     ),
                                   );
                                 },
-                                icon: const Icon(Icons.person_add),
-                                label: const Text('Add Friends'),
+                                icon: const Icon(Icons.search),
+                                label: const Text('Find People'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue[600],
+                                  backgroundColor: const Color(0xFF6495ED),
                                   foregroundColor: Colors.white,
                                 ),
                               ),

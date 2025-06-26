@@ -77,34 +77,65 @@ class AppServiceManager extends ChangeNotifier {
     return await UserDatabaseService.getUserByHandle(username);
   }
 
+  Future<List<UserModel>> getCurrentUserConnections() async {
+    if (currentUserId == null) return [];
+    return await UserDatabaseService.getUserConnections(currentUserId!);
+  }
+
+  Future<List<UserModel>> getConnectionRequests() async {
+    if (currentUserId == null) return [];
+    return await UserDatabaseService.getConnectionRequests(currentUserId!);
+  }
+
+  Future<void> sendConnectionRequest(String targetUserId) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    await UserDatabaseService.sendConnectionRequest(currentUserId!, targetUserId);
+  }
+
+  Future<void> acceptConnectionRequest(String fromUserId) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    await UserDatabaseService.acceptConnectionRequest(currentUserId!, fromUserId);
+  }
+
+  Future<void> rejectConnectionRequest(String fromUserId) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    await UserDatabaseService.rejectConnectionRequest(currentUserId!, fromUserId);
+  }
+
+  Future<void> removeConnection(String connectionId) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    await UserDatabaseService.removeConnection(currentUserId!, connectionId);
+  }
+
+  // Legacy methods for backward compatibility
+  @deprecated
   Future<List<UserModel>> getCurrentUserFriends() async {
-    if (currentUserId == null) return [];
-    return await UserDatabaseService.getUserFriends(currentUserId!);
+    return getCurrentUserConnections();
   }
 
+  @deprecated
   Future<List<UserModel>> getFriendRequests() async {
-    if (currentUserId == null) return [];
-    return await UserDatabaseService.getFriendRequests(currentUserId!);
+    return getConnectionRequests();
   }
 
+  @deprecated
   Future<void> sendFriendRequest(String targetUserId) async {
-    if (currentUserId == null) throw Exception('User not authenticated');
-    await UserDatabaseService.sendFriendRequest(currentUserId!, targetUserId);
+    return sendConnectionRequest(targetUserId);
   }
 
+  @deprecated
   Future<void> acceptFriendRequest(String fromUserId) async {
-    if (currentUserId == null) throw Exception('User not authenticated');
-    await UserDatabaseService.acceptFriendRequest(currentUserId!, fromUserId);
+    return acceptConnectionRequest(fromUserId);
   }
 
+  @deprecated
   Future<void> rejectFriendRequest(String fromUserId) async {
-    if (currentUserId == null) throw Exception('User not authenticated');
-    await UserDatabaseService.rejectFriendRequest(currentUserId!, fromUserId);
+    return rejectConnectionRequest(fromUserId);
   }
 
+  @deprecated
   Future<void> removeFriend(String friendId) async {
-    if (currentUserId == null) throw Exception('User not authenticated');
-    await UserDatabaseService.removeFriend(currentUserId!, friendId);
+    return removeConnection(friendId);
   }
 
   Future<void> blockUser(String userIdToBlock) async {
@@ -112,12 +143,23 @@ class AppServiceManager extends ChangeNotifier {
     await UserDatabaseService.blockUser(currentUserId!, userIdToBlock);
   }
 
-  Future<void> fixFriendsCount(String userId) async {
-    await UserDatabaseService.fixFriendsCount(userId);
+  Future<void> fixConnectionsCount(String userId) async {
+    await UserDatabaseService.fixConnectionsCount(userId);
   }
 
+  Future<void> fixAllConnectionsCounts() async {
+    await UserDatabaseService.fixAllConnectionsCounts();
+  }
+
+  // Legacy methods for backward compatibility
+  @deprecated
+  Future<void> fixFriendsCount(String userId) async {
+    return fixConnectionsCount(userId);
+  }
+
+  @deprecated
   Future<void> fixAllFriendsCounts() async {
-    await UserDatabaseService.fixAllFriendsCounts();
+    return fixAllConnectionsCounts();
   }
 
   // Story Operations
@@ -405,9 +447,14 @@ class AppServiceManager extends ChangeNotifier {
     return _authService.userStream;
   }
 
-  Stream<List<UserModel>> getCurrentUserFriendsStream() {
+  Stream<List<UserModel>> getCurrentUserConnectionsStream() {
     if (currentUserId == null) return Stream.value([]);
-    return UserDatabaseService.listenToFriends(currentUserId!);
+    return UserDatabaseService.listenToConnections(currentUserId!);
+  }
+
+  @deprecated
+  Stream<List<UserModel>> getCurrentUserFriendsStream() {
+    return getCurrentUserConnectionsStream();
   }
 
   Stream<List<StoryModel>> getPublicStoriesStream({int limit = 20}) {
@@ -464,12 +511,23 @@ class AppServiceManager extends ChangeNotifier {
     return story.hasUserLiked(currentUserId!);
   }
 
-  bool isCurrentUserFriend(String userId) {
-    return currentUser?.friends.contains(userId) ?? false;
+  bool isCurrentUserConnected(String userId) {
+    return currentUser?.connections.contains(userId) ?? false;
   }
 
+  bool hasReceivedConnectionRequestFrom(String userId) {
+    return currentUser?.connectionRequests.contains(userId) ?? false;
+  }
+
+  // Legacy methods for backward compatibility
+  @deprecated
+  bool isCurrentUserFriend(String userId) {
+    return isCurrentUserConnected(userId);
+  }
+
+  @deprecated
   bool hasReceivedFriendRequestFrom(String userId) {
-    return currentUser?.friendRequests.contains(userId) ?? false;
+    return hasReceivedConnectionRequestFrom(userId);
   }
 
   bool hasSentFriendRequestTo(String userId) {

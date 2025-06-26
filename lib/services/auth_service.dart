@@ -20,20 +20,29 @@ class AuthService extends ChangeNotifier {
       _user = user;
       
       if (user != null) {
-        // Update online status
-        await UserDatabaseService.updateOnlineStatus(user.uid, true);
-        
-        // Load user model
-        _userModel = await UserDatabaseService.getUserById(user.uid);
-        
-        // Migrate user to handle if needed (for backward compatibility)
-        if (_userModel != null && _userModel!.handle.isEmpty) {
-          try {
-            await UserDatabaseService.migrateUserToHandle(user.uid);
-            _userModel = await UserDatabaseService.getUserById(user.uid);
-          } catch (e) {
-            print('Failed to migrate user to handle: $e');
+        try {
+          // Update online status (safely)
+          await UserDatabaseService.updateOnlineStatus(user.uid, true);
+          
+          // Load user model
+          _userModel = await UserDatabaseService.getUserById(user.uid);
+          
+          if (_userModel == null) {
+            print('AuthService: User document not found for ${user.uid}, user needs onboarding');
+          } else {
+            // Migrate user to handle if needed (for backward compatibility)
+            if (_userModel!.handle.isEmpty) {
+              try {
+                await UserDatabaseService.migrateUserToHandle(user.uid);
+                _userModel = await UserDatabaseService.getUserById(user.uid);
+              } catch (e) {
+                print('Failed to migrate user to handle: $e');
+              }
+            }
           }
+        } catch (e) {
+          print('AuthService: Error loading user data: $e');
+          _userModel = null;
         }
       } else {
         // Update offline status for previous user
@@ -290,6 +299,40 @@ class AuthService extends ChangeNotifier {
   // Check if handle is available
   Future<bool> isHandleAvailable(String handle) async {
     return await UserDatabaseService.isHandleAvailable(handle);
+  }
+
+  // Reload user model from database
+  Future<void> reloadUserModel() async {
+    try {
+      if (_user == null) throw Exception('User not authenticated');
+      _userModel = await UserDatabaseService.getUserById(_user!.uid);
+      notifyListeners();
+    } catch (e) {
+      throw Exception('Failed to reload user model: $e');
+    }
+  }
+
+  // Delete account
+  Future<void> deleteAccount() async {
+    try {
+      if (_user == null) throw Exception('User not authenticated');
+      
+      // Delete user data from Firestore
+      await UserDatabaseService.deleteUserData(_user!.uid);
+      
+      // Delete Firebase Auth account
+      await _user!.delete();
+      
+      // Clear local state
+      _user = null;
+      _userModel = null;
+      
+      notifyListeners();
+    } on FirebaseAuthException catch (e) {
+      throw Exception('Failed to delete account: ${_handleAuthException(e)}');
+    } catch (e) {
+      throw Exception('Failed to delete account: $e');
+    }
   }
 
   // Handle Firebase Auth exceptions
