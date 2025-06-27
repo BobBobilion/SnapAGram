@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../../services/auth_service.dart';
 import '../../services/user_database_service.dart';
+import '../../services/storage_service.dart';
 import '../../models/user_model.dart';
 import '../../models/enums.dart';
 import '../../utils/app_theme.dart';
@@ -21,6 +24,8 @@ class AccountScreen extends ConsumerStatefulWidget {
 }
 
 class _AccountScreenState extends ConsumerState<AccountScreen> {
+  final ImagePicker _imagePicker = ImagePicker();
+
   @override
   Widget build(BuildContext context) {
     final authService = ref.watch(authServiceProvider);
@@ -138,19 +143,22 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             child: Column(
               children: [
                 // User Avatar at the top
-                CircleAvatar(
-                  radius: 50,
-                  backgroundColor: AppTheme.getColorShade(userModel, 100),
-                  backgroundImage: profilePicture != null
-                      ? NetworkImage(profilePicture)
-                      : null,
-                  child: profilePicture == null
-                      ? Icon(
-                          Icons.person,
-                          size: 50,
-                          color: AppTheme.getPrimaryColor(userModel),
-                        )
-                      : null,
+                GestureDetector(
+                  onTap: () => _showProfilePictureViewer(context, profilePicture, userModel),
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: AppTheme.getColorShade(userModel, 100),
+                    backgroundImage: profilePicture != null
+                        ? NetworkImage(profilePicture)
+                        : null,
+                    child: profilePicture == null
+                        ? Icon(
+                            Icons.person,
+                            size: 50,
+                            color: AppTheme.getPrimaryColor(userModel),
+                          )
+                        : null,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 
@@ -1372,5 +1380,344 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         );
       },
     );
+  }
+
+  void _showProfilePictureViewer(BuildContext context, String? profilePicture, UserModel? userModel) {
+    showDialog(
+      context: context,
+      builder: (context) => GestureDetector(
+        onTap: () => Navigator.pop(context),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.zero,
+          child: Container(
+            width: double.infinity,
+            height: double.infinity,
+            color: Colors.black.withOpacity(0.8),
+            child: Stack(
+              children: [
+                Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.9,
+                      maxHeight: MediaQuery.of(context).size.height * 0.8,
+                    ),
+                    child: GestureDetector(
+                      onTap: () {}, // Prevent tap from bubbling up
+                      child: InteractiveViewer(
+                        child: profilePicture != null
+                            ? Image.network(
+                                profilePicture,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 200,
+                                    height: 200,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.getColorShade(userModel, 100),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.person,
+                                      size: 100,
+                                      color: AppTheme.getPrimaryColor(userModel),
+                                    ),
+                                  );
+                                },
+                              )
+                            : Container(
+                                width: 200,
+                                height: 200,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.getColorShade(userModel, 100),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.person,
+                                  size: 100,
+                                  color: AppTheme.getPrimaryColor(userModel),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Close button
+                Positioned(
+                  top: 40,
+                  right: 20,
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+                // Upload button
+                Positioned(
+                  top: 40,
+                  left: 20,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.getPrimaryColor(userModel),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context); // Close viewer first
+                        _showUploadProfilePictureDialog(context, userModel);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showUploadProfilePictureDialog(BuildContext context, UserModel? userModel) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.edit,
+              color: AppTheme.getPrimaryColor(userModel),
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Update Profile Picture',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Choose how you\'d like to update your profile picture.',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: Text(
+                'Take Photo',
+                style: GoogleFonts.poppins(),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadProfilePicture(ImageSource.camera, userModel);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: Text(
+                'Choose from Gallery',
+                style: GoogleFonts.poppins(),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadProfilePicture(ImageSource.gallery, userModel);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(color: Colors.grey[600]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickAndUploadProfilePicture(ImageSource source, UserModel? userModel) async {
+    try {
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return;
+
+      // Show confirmation dialog
+      final shouldUpload = await _showUploadConfirmationDialog(context, pickedFile.path, userModel);
+      if (!shouldUpload) {
+        // Delete the temporary file
+        try {
+          await File(pickedFile.path).delete();
+        } catch (e) {
+          print('Error deleting temporary file: $e');
+        }
+        return;
+      }
+
+      // Show loading indicator
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Dialog(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Uploading profile picture...',
+                    style: GoogleFonts.poppins(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Upload image to storage
+      final authService = ref.read(authServiceProvider);
+      final currentUser = authService.user;
+      if (currentUser == null) throw Exception('User not authenticated');
+
+      final String imageUrl = await StorageService.uploadProfilePicture(
+        currentUser.uid,
+        File(pickedFile.path),
+      );
+
+      // Update user profile with new image URL
+      await UserDatabaseService.updateUserProfile(currentUser.uid, {
+        'profilePictureUrl': imageUrl,
+      });
+
+      // Update the auth service user model
+      await authService.reloadUserModel();
+
+      // Delete the temporary file
+      try {
+        await File(pickedFile.path).delete();
+      } catch (e) {
+        print('Error deleting temporary file: $e');
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog if open
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating profile picture: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<bool> _showUploadConfirmationDialog(BuildContext context, String imagePath, UserModel? userModel) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Confirm Profile Picture',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[800],
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppTheme.getPrimaryColor(userModel),
+                  width: 3,
+                ),
+              ),
+              child: ClipOval(
+                child: Image.file(
+                  File(imagePath),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Are you sure you want to use this as your profile picture?',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(color: Colors.grey[600]),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.getPrimaryColor(userModel),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(
+              'Confirm',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
   }
 } 

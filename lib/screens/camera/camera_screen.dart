@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
 import '../../utils/app_theme.dart';
 import 'photo_editor_screen.dart';
+import 'video_editor_screen.dart';
 
 class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
@@ -37,6 +38,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    
+    // Stop video recording if active
+    if (_isRecording && _cameraController?.value.isRecordingVideo == true) {
+      _cameraController?.stopVideoRecording().catchError((e) {
+        debugPrint('Error stopping video recording on dispose: $e');
+      });
+    }
+    
     _cameraController?.dispose();
     super.dispose();
   }
@@ -165,54 +174,78 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   }
 
   Future<void> _startVideoRecording() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+    if (_cameraController == null || 
+        !_cameraController!.value.isInitialized ||
+        _isRecording ||
+        _cameraController!.value.isRecordingVideo) {
       return;
     }
 
     try {
       await _cameraController!.startVideoRecording();
-      setState(() {
-        _isRecording = true;
-        _recordingDuration = 0;
-      });
-      _startRecordingTimer();
+      if (mounted) {
+        setState(() {
+          _isRecording = true;
+          _recordingDuration = 0;
+        });
+        _startRecordingTimer();
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error starting video recording: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      debugPrint('Error starting video recording: $e');
+      if (mounted) {
+        setState(() => _isRecording = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting video recording: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _stopVideoRecording() async {
-    if (_cameraController == null || !_isRecording) return;
+    if (_cameraController == null || 
+        !_isRecording || 
+        !_cameraController!.value.isRecordingVideo) {
+      if (mounted) {
+        setState(() => _isRecording = false);
+      }
+      return;
+    }
 
     try {
       final XFile video = await _cameraController!.stopVideoRecording();
-      setState(() => _isRecording = false);
-      
-      // For now, just show success message
-      // In the future, this would navigate to video editor
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Video saved! Duration: ${_recordingDuration}s'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        setState(() => _isRecording = false);
+        
+        // Navigate to video editor
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => VideoEditorScreen(
+              videoPath: video.path,
+              isFromCamera: true,
+            ),
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error stopping video recording: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      debugPrint('Error stopping video recording: $e');
+      if (mounted) {
+        setState(() => _isRecording = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error stopping video recording: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   void _startRecordingTimer() {
-    if (!_isRecording) return;
+    if (!_isRecording || !mounted) return;
     
     Future.delayed(const Duration(seconds: 1), () {
       if (_isRecording && mounted) {
@@ -233,6 +266,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
       _captureMode = mode;
       _recordingDuration = 0;
     });
+  }
+
+  void _handleVideoCapture() {
+    if (_isRecording) {
+      _stopVideoRecording();
+    } else {
+      _startVideoRecording();
+    }
   }
 
   @override
@@ -529,10 +570,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
           
           // Capture Button
           GestureDetector(
-            onTap: _captureMode == 'photo' ? _capturePhoto : null,
-            onTapDown: _captureMode == 'video' ? (_) => _startVideoRecording() : null,
-            onTapUp: _captureMode == 'video' ? (_) => _stopVideoRecording() : null,
-            onTapCancel: _captureMode == 'video' ? () => _stopVideoRecording() : null,
+            onTap: () {
+              if (_captureMode == 'photo') {
+                _capturePhoto();
+              } else {
+                _handleVideoCapture();
+              }
+            },
             child: Container(
               width: 80,
               height: 80,

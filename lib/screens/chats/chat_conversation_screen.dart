@@ -10,6 +10,7 @@ import '../../services/storage_service.dart';
 import '../../models/chat_model.dart';
 import '../../models/message_model.dart';
 import '../../models/user_model.dart';
+import '../../models/enums.dart';
 import '../../utils/app_theme.dart';
 
 class ChatConversationScreen extends ConsumerStatefulWidget {
@@ -227,15 +228,11 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
           child: CircularProgressIndicator(
             value: progress,
             strokeWidth: 1.5,
-            backgroundColor: isCurrentUser 
-                ? Colors.white.withOpacity(0.3) 
-                : Colors.grey[300],
+            backgroundColor: Colors.grey[300],
             valueColor: AlwaysStoppedAnimation<Color>(
               isWarning
                   ? Colors.red.withOpacity(0.8)
-                  : isCurrentUser 
-                      ? Colors.white.withOpacity(0.7) 
-                      : Colors.grey[500]!,
+                  : Colors.grey[500]!,
             ),
           ),
         ),
@@ -246,9 +243,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
             fontSize: 9,
             color: isWarning
                 ? Colors.red.withOpacity(0.7)
-                : isCurrentUser 
-                    ? Colors.white.withOpacity(0.5) 
-                    : Colors.grey[400],
+                : Colors.grey[500],
             fontStyle: FontStyle.italic,
           ),
         ),
@@ -459,6 +454,45 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     return widget.otherUserName ?? 'Chat';
   }
 
+  String _getRecipientName() {
+    if (_otherUser != null) {
+      return _otherUser!.displayName;
+    }
+    return widget.otherUserName ?? 'Chat';
+  }
+
+  String _getOnlineStatus() {
+    if (_otherUser != null) {
+      if (_otherUser!.isOnline) {
+        return 'Online';
+      } else {
+        final now = DateTime.now();
+        final lastSeen = _otherUser!.lastSeen;
+        final difference = now.difference(lastSeen);
+        
+        if (difference.inMinutes < 1) {
+          return 'Last seen just now';
+        } else if (difference.inMinutes < 60) {
+          return 'Last seen ${difference.inMinutes}m ago';
+        } else if (difference.inHours < 24) {
+          return 'Last seen ${difference.inHours}h ago';
+        } else if (difference.inDays == 1) {
+          return 'Last seen yesterday';
+        } else {
+          return 'Last seen ${difference.inDays}d ago';
+        }
+      }
+    }
+    return 'Offline';
+  }
+
+  Color _getOnlineStatusColor() {
+    if (_otherUser != null && _otherUser!.isOnline) {
+      return Colors.green[600]!;
+    }
+    return Colors.grey[500]!;
+  }
+
   String _getSenderDisplayName(MessageModel message) {
     if (message.senderId == ref.read(appServiceManagerProvider).currentUserId) {
       // Current user - show first name
@@ -476,6 +510,31 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     }
   }
 
+  Color _getMessageBubbleColor(bool isCurrentUser, userModel) {
+    if (isCurrentUser) {
+      // User's own messages: light blue-gray similar to Apple Messages
+      return const Color(0xFFE1E5EA);
+    } else {
+      // Other user's messages: subtle colors based on their role
+      if (_otherUser != null) {
+        if (_otherUser!.role == UserRole.walker) {
+          return const Color(0xFFDCF8C6); // Light green for walkers (WhatsApp-style)
+        } else if (_otherUser!.role == UserRole.owner) {
+          return const Color(0xFFD1E7FF); // Light blue for owners
+        }
+      }
+      // Fallback to white if role is unknown
+      return Colors.white;
+    }
+  }
+
+  Color _getTextColor(bool isCurrentUser) {
+    // All messages use dark text for better readability
+    return Colors.grey[800]!;
+  }
+
+
+
   @override
   Widget build(BuildContext context) {
     final serviceManager = ref.read(appServiceManagerProvider);
@@ -486,12 +545,55 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(
-          chatName,
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
-          ),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Colors.grey[300],
+              backgroundImage: _otherUser?.profilePictureUrl != null
+                  ? NetworkImage(_otherUser!.profilePictureUrl!)
+                  : null,
+              child: _otherUser?.profilePictureUrl == null
+                  ? Text(
+                      _getRecipientName().isNotEmpty 
+                          ? _getRecipientName()[0].toUpperCase()
+                          : 'U',
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _getRecipientName(),
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                      fontSize: 16,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    _getOnlineStatus(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: _getOnlineStatusColor(),
+                      fontWeight: FontWeight.w400,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         backgroundColor: Colors.white,
         elevation: 1,
@@ -569,9 +671,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                             itemCount: _messages.where((msg) => !msg.isDeleted).length,
                             itemBuilder: (context, index) {
                               final visibleMessages = _messages.where((msg) => !msg.isDeleted).toList();
-                              final message = visibleMessages[index];
-                              final bool isBottomMessage = index == 0; // Most recent message (bottom of chat)
-                              return _buildMessageItem(message, isBottomMessage, userModel);
+                              return _buildMessageWithTimeBanner(index, visibleMessages, userModel);
                             },
                           ),
               ],
@@ -663,10 +763,69 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     );
   }
 
+  Widget _buildMessageWithTimeBanner(int index, List<MessageModel> visibleMessages, userModel) {
+    final message = visibleMessages[index];
+    final isBottomMessage = index == 0;
+    
+    // Check if we need a time banner
+    Widget? timeBanner;
+    if (index < visibleMessages.length - 1) {
+      final nextMessage = visibleMessages[index + 1]; // Next message (older)
+      final timeDifference = message.createdAt.difference(nextMessage.createdAt);
+      
+      if (timeDifference.inHours >= 1) {
+        timeBanner = _buildTimeBanner(message.createdAt);
+      }
+    } else if (index == visibleMessages.length - 1) {
+      // Always show banner for the oldest message
+      timeBanner = _buildTimeBanner(message.createdAt);
+    }
+    
+    return Column(
+      children: [
+        if (timeBanner != null) ...[
+          timeBanner,
+          const SizedBox(height: 8),
+        ],
+        _buildMessageItem(message, isBottomMessage, userModel),
+      ],
+    );
+  }
+
+  Widget _buildTimeBanner(DateTime dateTime) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Center(
+        child: Text(
+          'sent at ${_formatFullDateTime(dateTime)}',
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            color: Colors.grey[500],
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatFullDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+    
+    final timeString = '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    
+    if (messageDate == today) {
+      return timeString;
+    } else if (messageDate == today.subtract(const Duration(days: 1))) {
+      return 'yesterday at $timeString';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at $timeString';
+    }
+  }
+
   Widget _buildMessageItem(MessageModel message, bool isBottomMessage, userModel) {
     final isCurrentUser = message.senderId == ref.read(appServiceManagerProvider).currentUserId;
-    final isDeleted = message.isDeleted;
-    final timeLeft = _getMessageTimeLeft(message);
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -678,15 +837,15 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: isCurrentUser ? AppTheme.getColorShade(userModel, 600) : Colors.white,
+                color: _getMessageBubbleColor(isCurrentUser, userModel),
                 borderRadius: isBottomMessage 
                     ? BorderRadius.only(
-                        topLeft: const Radius.circular(18),
-                        topRight: const Radius.circular(18),
-                        bottomLeft: isCurrentUser ? const Radius.circular(18) : const Radius.circular(4),
-                        bottomRight: isCurrentUser ? const Radius.circular(4) : const Radius.circular(18),
+                        topLeft: const Radius.circular(25),
+                        topRight: const Radius.circular(25),
+                        bottomLeft: isCurrentUser ? const Radius.circular(25) : const Radius.circular(6),
+                        bottomRight: isCurrentUser ? const Radius.circular(6) : const Radius.circular(25),
                       )
-                    : BorderRadius.circular(18),
+                    : BorderRadius.circular(25),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.05),
@@ -825,43 +984,10 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
                       message.content,
                       style: GoogleFonts.poppins(
                         fontSize: 14,
-                        color: isCurrentUser ? Colors.white : Colors.grey[800],
+                        color: _getTextColor(isCurrentUser),
                       ),
                     ),
-                  
-                  const SizedBox(height: 4),
-                  
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _formatMessageTime(message.createdAt),
-                        style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          color: isCurrentUser 
-                              ? Colors.white.withOpacity(0.7) 
-                              : Colors.grey[500],
-                        ),
-                      ),
-                      if (isCurrentUser) ...[
-                        const SizedBox(width: 4),
-                        Icon(
-                          message.hasUserRead(ref.read(appServiceManagerProvider).currentUserId ?? '')
-                              ? Icons.done_all
-                              : Icons.done,
-                          size: 12,
-                          color: message.hasUserRead(ref.read(appServiceManagerProvider).currentUserId ?? '')
-                              ? Colors.white.withOpacity(0.7)
-                              : Colors.white.withOpacity(0.5),
-                        ),
-                      ],
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 2),
-                  
-                  // Countdown timer
-                  _buildCountdownTimer(timeLeft, isCurrentUser),
+
                 ],
               ),
             ),
@@ -871,19 +997,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     );
   }
 
-  String _formatMessageTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
-    
-    if (messageDate == today) {
-      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    } else if (messageDate == today.subtract(const Duration(days: 1))) {
-      return 'Yesterday';
-    } else {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    }
-  }
+
 }
 
 class MessageTailPainter extends CustomPainter {
