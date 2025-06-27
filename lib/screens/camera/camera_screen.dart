@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
@@ -43,6 +42,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
     if (_isRecording && _cameraController?.value.isRecordingVideo == true) {
       _cameraController?.stopVideoRecording().catchError((e) {
         debugPrint('Error stopping video recording on dispose: $e');
+        throw e;
       });
     }
     

@@ -5,12 +5,10 @@ class AppTheme {
   // Default colors (blue theme for owners)
   static const Color _defaultPrimary = Color(0xFF6495ED); // Cornflower blue
   static const Color _defaultPrimary600 = Colors.blue;
-  static const Color _defaultPrimary100 = Colors.blue; // Will use Colors.blue[100]
   
   // Walker colors (green theme) - Slightly lighter green shades
   static const Color _walkerPrimary = Color(0xFF66BB6A); // Lighter Material Green 400
   static const Color _walkerPrimary600 = Color(0xFF66BB6A); // Lighter Material Green 400
-  static const Color _walkerPrimary100 = Color(0xFFDCEDC8); // Lighter green background
 
   /// Gets the primary theme color based on user role
   static Color getPrimaryColor(UserModel? user) {

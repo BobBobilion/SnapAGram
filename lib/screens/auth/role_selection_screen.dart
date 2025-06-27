@@ -28,7 +28,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
   // DogWalk blue color palette
   static const Color cornflowerBlue = Color(0xFF6495ED);
   static const Color skyBlue = Color(0xFF87CEEB);
-  static const Color aliceBlue = Color(0xFFF0F8FF);
   static const Color lightBlueWhite = Color(0xFFFAFAFF);
 
   @override

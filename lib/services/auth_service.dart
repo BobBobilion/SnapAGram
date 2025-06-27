@@ -291,7 +291,6 @@ class AuthService extends ChangeNotifier {
   Future<void> deleteAccount() async {
     try {
       if (_user == null) throw Exception('User not authenticated');
-      final userService = _ref.read(userServiceProvider);
       
       // This needs a more complete implementation once other services are refactored
       // await userService.deleteUserData(_user!.uid); 

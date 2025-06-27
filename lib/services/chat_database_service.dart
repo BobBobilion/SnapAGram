@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
-import '../models/user_model.dart';
 import 'user_database_service.dart';
 
 class ChatDatabaseService {

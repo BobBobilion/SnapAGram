@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'models/enums.dart';
@@ -11,6 +12,10 @@ import 'screens/home/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load environment variables from assets
+  await dotenv.load(fileName: ".env");
+  
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   }
@@ -118,12 +123,11 @@ class AuthWrapper extends ConsumerWidget {
       
       // Check if user has completed onboarding
       // Must have isOnboardingComplete=true AND have a role-specific profile
-      final hasRole = user.role != null;
       final hasRoleProfile = (user.role == UserRole.walker && user.walkerProfile != null) || 
                             (user.role == UserRole.owner && user.ownerProfile != null);
-      final hasCompleted = user.isOnboardingComplete && hasRole && hasRoleProfile;
+      final hasCompleted = user.isOnboardingComplete && hasRoleProfile;
       
-      print('_checkUserOnboardingStatusSync: hasRole: $hasRole, hasRoleProfile: $hasRoleProfile, isOnboardingComplete: ${user.isOnboardingComplete}');
+      print('_checkUserOnboardingStatusSync: hasRoleProfile: $hasRoleProfile, isOnboardingComplete: ${user.isOnboardingComplete}');
       print('_checkUserOnboardingStatusSync: Final result: $hasCompleted');
       
       return hasCompleted;

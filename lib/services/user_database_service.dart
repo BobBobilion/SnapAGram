@@ -1,11 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart';
 import '../models/enums.dart';
 import '../models/walker_profile.dart';
 import '../models/owner_profile.dart';
 import 'storage_service.dart';
+
+final userProfileProvider = StreamProvider.autoDispose.family<UserModel?, String>((ref, userId) {
+  return UserDatabaseService.listenToUser(userId);
+});
 
 class UserDatabaseService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;

@@ -29,7 +29,6 @@ class AddressAutocompleteField extends StatefulWidget {
 class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
   List<AddressSuggestion> _suggestions = [];
   bool _isLoading = false;
-  bool _showSuggestions = false;
   Timer? _debounceTimer;
   OverlayEntry? _overlayEntry;
   final LayerLink _layerLink = LayerLink();

@@ -8,6 +8,8 @@ import '../../services/user_database_service.dart';
 import '../../services/storage_service.dart';
 import '../../models/user_model.dart';
 import '../../models/enums.dart';
+import '../../models/owner_profile.dart';
+import '../../models/walker_profile.dart';
 import '../../utils/app_theme.dart';
 import '../auth/login_screen.dart';
 import '../auth/complete_onboarding_screen.dart';
@@ -30,7 +32,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Widget build(BuildContext context) {
     final authService = ref.watch(authServiceProvider);
     final user = authService.user;
-    final userModel = authService.userModel;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -127,8 +128,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final profilePicture = userModel?.profilePictureUrl ?? user?.photoURL;
     final handle = userModel?.handle ?? '';
     final bio = userModel?.bio ?? '';
-    final isOnline = userModel?.isOnline ?? false;
-    final lastSeen = userModel?.lastSeen;
     final createdAt = userModel?.createdAt;
 
     return Card(
@@ -248,106 +247,16 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   ),
                 ],
                 
-                // Onboarding Information
+                // Role-specific detailed information
                 if (userModel?.isOnboardingComplete == true) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[200]!),
-                    ),
-                    child: Column(
-                      children: [
-                        if (userModel?.isOwner == true && userModel?.ownerProfile != null) ...[
-                          // Dog Information
-                          Row(
-                            children: [
-                              Icon(Icons.pets, size: 16, color: Colors.green[600]),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Dog: ${userModel!.ownerProfile!.dogName}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey[800],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              if (userModel.ownerProfile!.dogBreed?.isNotEmpty == true) ...[
-                                Icon(Icons.info_outline, size: 14, color: Colors.grey[600]),
-                                const SizedBox(width: 4),
-                                Text(
-                                  userModel.ownerProfile!.dogBreed!,
-                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
-                                ),
-                                const Text(' • ', style: TextStyle(color: Colors.grey)),
-                              ],
-                              Icon(Icons.straighten, size: 14, color: Colors.grey[600]),
-                              const SizedBox(width: 4),
-                              Text(
-                                userModel.ownerProfile!.dogSizeText,
-                                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
-                              ),
-                              if (userModel.ownerProfile!.dogAge != null) ...[
-                                const Text(' • ', style: TextStyle(color: Colors.grey)),
-                                Icon(Icons.cake, size: 14, color: Colors.grey[600]),
-                                const SizedBox(width: 4),
-                                Text(
-                                  userModel.ownerProfile!.ageText,
-                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ] else if (userModel?.isWalker == true && userModel?.walkerProfile != null) ...[
-                          // Walker Information
-                          Row(
-                            children: [
-                              Icon(Icons.directions_walk, size: 16, color: AppTheme.getPrimaryColor(userModel)),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Dog Walker',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey[800],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              if (userModel?.walkerProfile?.hasReviews == true) ...[
-                                Icon(Icons.star, size: 14, color: Colors.amber[600]),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${userModel?.walkerProfile?.formattedRating} (${userModel?.walkerProfile?.totalReviews})',
-                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
-                                ),
-                                const Text(' • ', style: TextStyle(color: Colors.grey)),
-                              ],
-                              Icon(Icons.pets, size: 14, color: Colors.grey[600]),
-                              const SizedBox(width: 4),
-                              Text(
-                                userModel?.walkerProfile?.dogSizePreferences.isEmpty == true
-                                    ? 'All sizes' 
-                                    : userModel?.walkerProfile?.dogSizePreferences.map((s) => s.name).join(', ') ?? 'All sizes',
-                                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 20),
+                  if (userModel?.isOwner == true && userModel?.ownerProfile != null) ...[
+                    _buildOwnerDogSection(userModel!.ownerProfile!),
+                  ] else if (userModel?.isWalker == true && userModel?.walkerProfile != null) ...[
+                    _buildWalkerPreferencesSection(userModel!.walkerProfile!),
+                  ],
                 ],
+                
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -443,6 +352,438 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     );
   }
 
+  Widget _buildOwnerDogSection(OwnerProfile ownerProfile) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Dog header with photo and name
+          Row(
+            children: [
+              // Dog photo
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.grey[300]!, width: 2),
+                ),
+                child: ClipOval(
+                  child: ownerProfile.dogPhotoUrl != null
+                      ? Image.network(
+                          ownerProfile.dogPhotoUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: Colors.grey[200],
+                              child: Icon(
+                                Icons.pets,
+                                size: 30,
+                                color: Colors.grey[600],
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
+                          color: Colors.grey[200],
+                          child: Icon(
+                            Icons.pets,
+                            size: 30,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Dog name and basic info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      ownerProfile.dogName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    if (ownerProfile.dogBreed?.isNotEmpty == true) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        ownerProfile.dogBreed!,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          // Dog bio if available
+          if (ownerProfile.dogBio?.isNotEmpty == true) ...[
+            const SizedBox(height: 12),
+            Stack(
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey[300]!, width: 1),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      ownerProfile.dogBio!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 16,
+                  top: 2,
+                  child: Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Text(
+                      'Bio',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          
+          const SizedBox(height: 12),
+          
+          // Dog stats stacked vertically
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildDogStatCapsule(
+                      icon: Icons.pets,
+                      value: _getSizeLetter(ownerProfile.dogSize),
+                      color: Colors.blue[100]!,
+                      textColor: Colors.blue[700]!,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildDogStatCapsule(
+                      icon: _getGenderIcon(ownerProfile.dogGender),
+                      value: _getGenderText(ownerProfile.dogGender),
+                      color: Colors.pink[100]!,
+                      textColor: Colors.pink[700]!,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildDogStatCapsule(
+                      icon: Icons.timer,
+                      value: ownerProfile.preferredDurationText,
+                      color: Colors.green[100]!,
+                      textColor: Colors.green[700]!,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          // Age if available
+          if (ownerProfile.dogAge != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.cake, size: 16, color: Colors.orange[600]),
+                const SizedBox(width: 6),
+                Text(
+                  ownerProfile.ageText,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWalkerPreferencesSection(WalkerProfile walkerProfile) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Walker header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue[100],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.directions_walk,
+                  size: 24,
+                  color: Colors.blue[700],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Dog Walker',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    if (walkerProfile.hasReviews) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.star, size: 14, color: Colors.amber[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${walkerProfile.formattedRating} (${walkerProfile.totalReviews} reviews)',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Walker bio if available
+          if (walkerProfile.bio?.isNotEmpty == true) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Text(
+                walkerProfile.bio!,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.grey[700],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          
+          // Preferences section
+          Text(
+            'Preferences',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // Dog sizes
+          _buildPreferenceRow(
+            icon: Icons.pets,
+            label: 'Dog Sizes',
+            values: walkerProfile.dogSizePreferences.isEmpty 
+                ? ['All sizes']
+                : walkerProfile.dogSizePreferences.map((s) => s.displayName).toList(),
+            color: Colors.green[100]!,
+            textColor: Colors.green[700]!,
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // Walk durations
+          _buildPreferenceRow(
+            icon: Icons.timer,
+            label: 'Walk Durations',
+            values: walkerProfile.walkDurations.map((d) => d.displayText).toList(),
+            color: Colors.blue[100]!,
+            textColor: Colors.blue[700]!,
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // Availability
+          _buildPreferenceRow(
+            icon: Icons.schedule,
+            label: 'Availability',
+            values: walkerProfile.availability.map((a) => a.displayName).toList(),
+            color: Colors.orange[100]!,
+            textColor: Colors.orange[700]!,
+          ),
+          
+          // Price if available
+          if (walkerProfile.pricePerWalk != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.attach_money, size: 16, color: Colors.green[600]),
+                const SizedBox(width: 6),
+                Text(
+                  '\$${walkerProfile.pricePerWalk!.toStringAsFixed(0)} per walk',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDogStatCapsule({
+    required IconData icon,
+    required String value,
+    required Color color,
+    required Color textColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(32),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: textColor),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreferenceRow({
+    required IconData icon,
+    required String label,
+    required List<String> values,
+    required Color color,
+    required Color textColor,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: textColor),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: values.map((value) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    value,
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: textColor,
+                    ),
+                  ),
+                )).toList(),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   String _formatDate(DateTime? date) {
     if (date == null) return 'N/A';
     final now = DateTime.now();
@@ -487,8 +828,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Widget _buildQuickStats(UserModel? userModel) {
     final connectionsCount = userModel?.connectionsCount ?? 0;
     final storiesCount = userModel?.storiesCount ?? 0;
-    final lastSeen = userModel?.lastSeen;
-    final isOnline = userModel?.isOnline ?? false;
 
     return Row(
       children: [
@@ -1719,5 +2058,42 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     );
 
     return result ?? false;
+  }
+
+  String _getSizeLetter(DogSize dogSize) {
+    switch (dogSize) {
+      case DogSize.small:
+        return 'S';
+      case DogSize.medium:
+        return 'M';
+      case DogSize.large:
+        return 'L';
+      case DogSize.extraLarge:
+        return 'XL';
+    }
+  }
+
+  IconData _getGenderIcon(String? dogGender) {
+    if (dogGender == null) return Icons.question_mark;
+    switch (dogGender.toLowerCase()) {
+      case 'male':
+        return Icons.male;
+      case 'female':
+        return Icons.female;
+      default:
+        return Icons.question_mark;
+    }
+  }
+
+  String _getGenderText(String? dogGender) {
+    if (dogGender == null) return 'Unknown';
+    switch (dogGender.toLowerCase()) {
+      case 'male':
+        return 'Male';
+      case 'female':
+        return 'Female';
+      default:
+        return 'Unknown';
+    }
   }
 } 

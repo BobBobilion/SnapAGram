@@ -19,6 +19,11 @@ A beautiful and modern Flutter application with Firebase authentication, featuri
   - Beautiful animations and transitions
   - User profile display with Google profile pictures
 
+- 🤖 **AI-Powered Chat**
+  - OpenAI GPT-4 integration for smart text recommendations
+  - Context-aware conversation suggestions
+  - Automatic picture suggestions for dog-related chats
+
 - 📱 **Cross-Platform**
   - Works on Android, iOS, Web, and Desktop
   - Consistent experience across platforms
@@ -29,6 +34,7 @@ A beautiful and modern Flutter application with Firebase authentication, featuri
 - Dart SDK
 - Firebase project with Authentication enabled
 - Google Cloud Console project with OAuth 2.0 configured
+- OpenAI API key (for chat recommendations)
 - Android Studio / VS Code
 
 ## Setup Instructions
@@ -46,12 +52,26 @@ cd snapagram
 flutter pub get
 ```
 
-### 3. Firebase Configuration
+### 3. Environment Variables Setup
+
+Create a `.env` file in the root directory with your API keys:
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+**Important Security Notes:**
+- The `.env` file is already in `.gitignore` to prevent committing sensitive data
+- Never commit your API keys to version control
+- Keep your API keys secure and rotate them regularly
+
+### 4. Firebase Configuration
 
 The app is already configured with your Firebase project. The configuration is located in:
 - `lib/firebase_options.dart`
 
-### 4. Google Sign-In Setup
+### 5. Google Sign-In Setup
 
 #### Firebase Console Setup:
 1. Go to Firebase Console → Authentication → Sign-in method
@@ -68,7 +88,7 @@ The app is already configured with your Firebase project. The configuration is l
    - **Android**: Add your package name and SHA-1 fingerprint
    - **iOS**: Add your bundle identifier
 
-### 5. Run the App
+### 6. Run the App
 
 ```bash
 flutter run

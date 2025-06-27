@@ -85,7 +85,7 @@ class _VideoPostScreenState extends ConsumerState<VideoPostScreen> {
   }
 
   String _formatDuration(Duration duration) {
-    return '${duration.inSeconds}';
+    return '${duration.inSeconds}s';
   }
 
   Future<void> _postVideo() async {
@@ -255,7 +255,7 @@ class _VideoPostScreenState extends ConsumerState<VideoPostScreen> {
                 activeTrackColor: AppTheme.getPrimaryColor(userModel),
                 inactiveTrackColor: Colors.grey[300],
                 thumbColor: AppTheme.getPrimaryColor(userModel),
-                overlayColor: AppTheme.getPrimaryColor(userModel)?.withOpacity(0.1),
+                overlayColor: AppTheme.getPrimaryColor(userModel).withOpacity(0.1),
                 trackHeight: 3.0,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
               ),
@@ -272,7 +272,7 @@ class _VideoPostScreenState extends ConsumerState<VideoPostScreen> {
           
           // Time Display
           Text(
-            '${_formatDuration(_currentPosition)} / ${_formatDuration(_totalDuration)}',
+            _formatDuration(_currentPosition),
             style: GoogleFonts.poppins(
               fontSize: 14,
               color: Colors.grey[700],
@@ -313,7 +313,7 @@ class _VideoPostScreenState extends ConsumerState<VideoPostScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel)!),
+                  borderSide: BorderSide(color: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel)),
                 ),
                 contentPadding: const EdgeInsets.all(16),
               ),

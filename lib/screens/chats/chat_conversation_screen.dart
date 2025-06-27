@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/app_service_manager.dart';
 import '../../services/auth_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/openai_service.dart';
 import '../../models/chat_model.dart';
 import '../../models/message_model.dart';
 import '../../models/user_model.dart';
@@ -43,12 +44,23 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
   Timer? _messageTimer;
   StreamSubscription<List<MessageModel>>? _messagesSubscription;
   Set<String> _deletingMessages = {}; // Track messages being deleted
+  
+  // Text recommendations state
+  List<String> _textRecommendations = [];
+  bool _isLoadingRecommendations = false;
+  bool _showRecommendations = true;
 
   @override
   void initState() {
     super.initState();
     _loadChatAndMessages();
     _startMessageTimer();
+    
+    // Debug: Check API key on initialization
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final openAIService = ref.read(openAIServiceProvider);
+      print('🔑 API Key check on init: ${openAIService.isApiKeyConfigured()}');
+    });
   }
 
   @override
@@ -75,6 +87,26 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
         setState(() {
           _messages = filteredMessages;
         });
+        
+        // Regenerate recommendations when new messages arrive
+        if (_showRecommendations && !_isLoadingRecommendations) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              _generateTextRecommendations();
+            }
+          });
+        } else if (!_showRecommendations && messages.isNotEmpty) {
+          // Show recommendations again if they were hidden and new messages arrive
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            if (mounted) {
+              setState(() {
+                _showRecommendations = true;
+              });
+              _generateTextRecommendations();
+              print('🔄 Recommendations restored after new message');
+            }
+          });
+        }
       }
     }, onError: (error) {
       if (mounted) {
@@ -282,6 +314,14 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
       if (chat != null) {
         await serviceManager.markMessagesAsRead(widget.chatId);
       }
+
+      // Generate initial recommendations
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          print('🚀 Generating initial recommendations...');
+          _generateTextRecommendations();
+        }
+      });
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -292,6 +332,131 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
           ),
         );
       }
+    }
+  }
+
+  Future<void> _generateTextRecommendations() async {
+    if (_isLoadingRecommendations) return;
+    
+    print('🔍 Starting to generate text recommendations...');
+    setState(() => _isLoadingRecommendations = true);
+    
+    try {
+      final authService = ref.read(authServiceProvider);
+      final currentUser = authService.userModel;
+      
+      if (currentUser == null) {
+        print('❌ Current user is null, skipping recommendations');
+        setState(() => _isLoadingRecommendations = false);
+        return;
+      }
+      
+      final openAIService = ref.read(openAIServiceProvider);
+      
+      // Check if API key is configured
+      if (!openAIService.isApiKeyConfigured()) {
+        print('❌ OpenAI API key not configured. Skipping recommendations.');
+        setState(() {
+          _textRecommendations = [];
+          _isLoadingRecommendations = false;
+        });
+        return;
+      }
+      
+      print('✅ API key is configured, proceeding with recommendations');
+      
+      // Get last message for context
+      String? lastMessage;
+      if (_messages.isNotEmpty) {
+        final lastMsg = _messages.first;
+        if (lastMsg.type == MessageType.text) {
+          lastMessage = lastMsg.content;
+        }
+      }
+      
+      print('📝 Generating recommendations for ${_messages.length} messages');
+      
+      final recommendations = await openAIService.generateTextRecommendations(
+        recentMessages: _messages.take(10).toList(),
+        currentUser: currentUser,
+        otherUser: _otherUser,
+        lastMessage: lastMessage,
+      );
+      
+      print('🎯 Received ${recommendations.length} recommendations: $recommendations');
+      
+      if (mounted) {
+        setState(() {
+          _textRecommendations = recommendations;
+          _isLoadingRecommendations = false;
+        });
+        print('✅ Recommendations updated in UI');
+      }
+    } catch (e) {
+      print('❌ Error generating recommendations: $e');
+      // Provide fallback recommendations on error
+      if (mounted) {
+        setState(() {
+          _textRecommendations = ['Hello!', 'How are you?', 'Nice to meet you!'];
+          _isLoadingRecommendations = false;
+        });
+        print('✅ Using fallback recommendations');
+      }
+    }
+  }
+
+  Future<void> _sendRecommendedMessage(String message) async {
+    if (message.isEmpty || _isSending) return;
+
+    // Check if it's a picture suggestion
+    if (message.contains('📷') || message.toLowerCase().contains('picture') || message.toLowerCase().contains('photo')) {
+      await _pickAndSendImage();
+      return;
+    }
+
+    setState(() => _isSending = true);
+
+    try {
+      final serviceManager = ref.read(appServiceManagerProvider);
+      await serviceManager.sendMessage(
+        chatId: widget.chatId,
+        type: MessageType.text,
+        content: message,
+      );
+      
+      // Hide recommendations after sending
+      setState(() {
+        _showRecommendations = false;
+        _textRecommendations = [];
+      });
+      
+      // Generate new recommendations after a delay
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _showRecommendations = true);
+          _generateTextRecommendations();
+        }
+      });
+      
+      // Scroll to bottom
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sending message: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isSending = false);
     }
   }
 
@@ -309,6 +474,20 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
         type: MessageType.text,
         content: message,
       );
+      
+      // Hide recommendations after sending
+      setState(() {
+        _showRecommendations = false;
+        _textRecommendations = [];
+      });
+      
+      // Generate new recommendations after a delay
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _showRecommendations = true);
+          _generateTextRecommendations();
+        }
+      });
       
       // The real-time stream will automatically update the UI with the new message
       // Scroll to bottom
@@ -533,15 +712,10 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     return Colors.grey[800]!;
   }
 
-
-
   @override
   Widget build(BuildContext context) {
-    final serviceManager = ref.read(appServiceManagerProvider);
     final authService = ref.watch(authServiceProvider);
     final userModel = authService.userModel;
-    final currentUserId = serviceManager.currentUserId ?? '';
-    final chatName = _chat?.getDisplayName(currentUserId) ?? widget.otherUserName ?? 'Chat';
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -602,6 +776,28 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          // Debug button for testing recommendations
+          IconButton(
+            icon: Icon(Icons.bug_report, color: Colors.grey[600]),
+            onPressed: () {
+              print('🐛 Manual trigger of recommendations');
+              if (_showRecommendations && _textRecommendations.isNotEmpty) {
+                // Hide recommendations if they're showing
+                setState(() {
+                  _showRecommendations = false;
+                  _textRecommendations = [];
+                });
+                print('✅ Recommendations hidden via debug button');
+              } else {
+                // Show recommendations
+                setState(() {
+                  _showRecommendations = true;
+                });
+                _generateTextRecommendations();
+                print('✅ Recommendations shown via debug button');
+              }
+            },
+          ),
           IconButton(
             icon: Icon(Icons.more_vert, color: Colors.grey[600]),
             onPressed: () {
@@ -677,6 +873,9 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
               ],
             ),
           ),
+          
+          // Text Recommendations
+          _buildTextRecommendations(userModel),
           
           // Message Input
           Container(
@@ -997,6 +1196,177 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     );
   }
 
+  Widget _buildTextRecommendations(UserModel? userModel) {
+    print('🎨 Building text recommendations UI:');
+    print('   - _showRecommendations: $_showRecommendations');
+    print('   - _textRecommendations.length: ${_textRecommendations.length}');
+    print('   - _isLoadingRecommendations: $_isLoadingRecommendations');
+    
+    // Show recommendations if we're loading OR if we have recommendations OR if we should show them
+    if (!_showRecommendations && _textRecommendations.isEmpty && !_isLoadingRecommendations) {
+      print('   - Skipping recommendations display');
+      return const SizedBox.shrink();
+    }
+
+    print('   - Displaying recommendations');
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_isLoadingRecommendations) ...[
+            Row(
+              children: [
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppTheme.getPrimaryColor(userModel),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Generating suggestions...',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ] else if (_textRecommendations.isNotEmpty) ...[
+            Row(
+              children: [
+                Icon(
+                  Icons.lightbulb_outline,
+                  size: 12,
+                  color: Colors.grey[600],
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Quick replies',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () {
+                    print('❌ Close button pressed');
+                    setState(() {
+                      _showRecommendations = false;
+                      _textRecommendations = [];
+                    });
+                    print('✅ Recommendations hidden');
+                    
+                    // Show feedback to user
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Suggestions hidden. They\'ll return when new messages arrive.',
+                          style: GoogleFonts.poppins(fontSize: 12),
+                        ),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                        margin: const EdgeInsets.all(16),
+                      ),
+                    );
+                  },
+                  icon: Icon(
+                    Icons.close,
+                    size: 18,
+                    color: Colors.grey[500],
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  splashRadius: 14,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _textRecommendations.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final suggestion = entry.value;
+                  
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      right: index < _textRecommendations.length - 1 ? 6 : 0,
+                    ),
+                    child: _buildRecommendationChip(suggestion, userModel),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecommendationChip(String suggestion, UserModel? userModel) {
+    final isPictureChip = suggestion.contains('📷') || 
+                         suggestion.toLowerCase().contains('picture') || 
+                         suggestion.toLowerCase().contains('photo');
+    
+    return GestureDetector(
+      onTap: () => _sendRecommendedMessage(suggestion),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isPictureChip 
+              ? Colors.blue[50] 
+              : AppTheme.getColorShade(userModel, 50),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isPictureChip 
+                ? Colors.blue[200]! 
+                : (AppTheme.getColorShade(userModel, 200) ?? Colors.grey[300]!),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isPictureChip) ...[
+              Icon(
+                Icons.camera_alt,
+                size: 12,
+                color: Colors.blue[600],
+              ),
+              const SizedBox(width: 3),
+            ],
+            Flexible(
+              child: Text(
+                suggestion,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: isPictureChip 
+                      ? Colors.blue[700] 
+                      : AppTheme.getColorShade(userModel, 700),
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
 }
 

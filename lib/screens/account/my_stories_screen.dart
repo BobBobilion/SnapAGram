@@ -8,7 +8,9 @@ import '../../models/story_model.dart';
 import '../../utils/app_theme.dart';
 
 class MyStoriesScreen extends ConsumerStatefulWidget {
-  const MyStoriesScreen({super.key});
+  final String? userId;
+
+  const MyStoriesScreen({super.key, this.userId});
 
   @override
   ConsumerState<MyStoriesScreen> createState() => _MyStoriesScreenState();
@@ -38,9 +40,9 @@ class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
     
     try {
       final serviceManager = ref.read(appServiceManagerProvider);
-      print('MyStoriesScreen: Loading user stories...');
-      final stories = await serviceManager.getCurrentUserStories();
-      print('MyStoriesScreen: Loaded ${stories.length} stories');
+      final stories = widget.userId == null
+          ? await serviceManager.getCurrentUserStories()
+          : await serviceManager.getUserStories(widget.userId!);
       
       if (mounted) {
         setState(() {
@@ -49,12 +51,11 @@ class _MyStoriesScreenState extends ConsumerState<MyStoriesScreen> {
         });
       }
     } catch (e) {
-      print('MyStoriesScreen: Error loading stories - $e');
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading your stories: $e'),
+            content: Text('Error loading stories: $e'),
             backgroundColor: Colors.red,
           ),
         );

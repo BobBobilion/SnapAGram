@@ -160,92 +160,94 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
             'Edit Text',
             style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: textController,
-                decoration: const InputDecoration(
-                  labelText: 'Text',
-                  border: OutlineInputBorder(),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: textController,
+                  decoration: const InputDecoration(
+                    labelText: 'Text',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
                 ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Text('Size: '),
-                  Expanded(
-                    child: Slider(
-                      value: fontSize,
-                      min: 12.0,
-                      max: 48.0,
-                      divisions: 36,
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text('Size: '),
+                    Expanded(
+                      child: Slider(
+                        value: fontSize,
+                        min: 12.0,
+                        max: 48.0,
+                        divisions: 36,
+                        activeColor: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
+                        onChanged: (value) {
+                          setDialogState(() => fontSize = value);
+                        },
+                      ),
+                    ),
+                    Text('${fontSize.round()}'),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text('Bold: '),
+                    Switch(
+                      value: fontWeight == FontWeight.bold,
                       activeColor: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
                       onChanged: (value) {
-                        setDialogState(() => fontSize = value);
+                        setDialogState(() {
+                          fontWeight = value ? FontWeight.bold : FontWeight.normal;
+                        });
                       },
                     ),
-                  ),
-                  Text('${fontSize.round()}'),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('Bold: '),
-                  Switch(
-                    value: fontWeight == FontWeight.bold,
-                    activeColor: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
-                    onChanged: (value) {
-                      setDialogState(() {
-                        fontWeight = value ? FontWeight.bold : FontWeight.normal;
-                      });
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Pick a color'),
-                      content: SingleChildScrollView(
-                        child: ColorPicker(
-                          pickerColor: selectedColor,
-                          onColorChanged: (color) {
-                            selectedColor = color;
-                          },
+                  ],
+                ),
+                const SizedBox(height: 16),
+                GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Pick a color'),
+                        content: SingleChildScrollView(
+                          child: ColorPicker(
+                            pickerColor: selectedColor,
+                            onColorChanged: (color) {
+                              selectedColor = color;
+                            },
+                          ),
                         ),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              setDialogState(() {});
+                              Navigator.pop(context);
+                            },
+                            child: const Text('Done'),
+                          ),
+                        ],
                       ),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            setDialogState(() {});
-                            Navigator.pop(context);
-                          },
-                          child: const Text('Done'),
-                        ),
-                      ],
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: selectedColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey),
                     ),
-                  );
-                },
-                child: Container(
-                  width: double.infinity,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: selectedColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey),
-                  ),
-                  child: const Center(
-                    child: Text('Tap to change color'),
+                    child: const Center(
+                      child: Text('Tap to change color'),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
             TextButton(

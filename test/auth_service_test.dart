@@ -1,13 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mockito/mockito.dart';
 import 'package:snapagram/services/auth_service.dart';
+
+class MockRef extends Mock implements Ref {}
 
 void main() {
   group('AuthService Tests', () {
     late AuthService authService;
+    late MockRef mockRef;
 
     setUp(() {
-      authService = AuthService();
+      mockRef = MockRef();
+      authService = AuthService(mockRef);
     });
 
     test('should initialize auth service', () {

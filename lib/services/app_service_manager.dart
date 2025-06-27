@@ -282,6 +282,10 @@ class AppServiceManager extends ChangeNotifier {
     return await StoryDatabaseService.getUserStories(currentUserId!);
   }
 
+  Future<List<StoryModel>> getUserStories(String userId) async {
+    return await StoryDatabaseService.getUserStories(userId);
+  }
+
   Future<void> viewStory(String storyId) async {
     if (currentUserId == null) throw Exception('User not authenticated');
     await StoryDatabaseService.viewStory(storyId, currentUserId!);
