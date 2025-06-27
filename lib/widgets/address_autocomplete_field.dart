@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AddressAutocompleteField extends StatefulWidget {
   final TextEditingController controller;
@@ -34,8 +35,14 @@ class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
   final LayerLink _layerLink = LayerLink();
   final FocusNode _focusNode = FocusNode();
   
-  // You'll need to replace this with your actual Google Places API key
-  static const String _apiKey = 'AIzaSyCwzSH_yhw-svjI_3ATWR5CRCNcFYqplcs';
+  // Get API key from environment variables
+  String get _apiKey {
+    final apiKey = dotenv.env['GOOGLE_PLACES_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Google Places API key not found. Please check your .env file.');
+    }
+    return apiKey;
+  }
 
   @override
   void initState() {
