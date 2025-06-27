@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'enums.dart';
 import 'walker_profile.dart';
 import 'owner_profile.dart';
+import 'review.dart';
 
 class UserModel {
   final String uid;
@@ -30,6 +31,8 @@ class UserModel {
   final WalkerProfile? walkerProfile;
   final OwnerProfile? ownerProfile;
   final bool isOnboardingComplete;
+  // Review system
+  final ReviewSummary? reviewSummary;
 
   UserModel({
     required this.uid,
@@ -56,6 +59,7 @@ class UserModel {
     this.walkerProfile,
     this.ownerProfile,
     this.isOnboardingComplete = false,
+    this.reviewSummary,
   });
 
   // Convert to Firestore document
@@ -91,6 +95,7 @@ class UserModel {
       'walkerProfile': walkerProfile?.toMap(),
       'ownerProfile': ownerProfile?.toMap(),
       'isOnboardingComplete': isOnboardingComplete,
+      'reviewSummary': reviewSummary?.toMap(),
     };
   }
 
@@ -128,6 +133,9 @@ class UserModel {
           ? OwnerProfile.fromMap(map['ownerProfile']) 
           : null,
       isOnboardingComplete: map['isOnboardingComplete'] ?? false,
+      reviewSummary: map['reviewSummary'] != null 
+          ? ReviewSummary.fromMap(map['reviewSummary']) 
+          : null,
     );
   }
 
@@ -159,6 +167,7 @@ class UserModel {
     WalkerProfile? walkerProfile,
     OwnerProfile? ownerProfile,
     bool? isOnboardingComplete,
+    ReviewSummary? reviewSummary,
   }) {
     return UserModel(
       uid: uid,
@@ -185,6 +194,7 @@ class UserModel {
       walkerProfile: walkerProfile ?? this.walkerProfile,
       ownerProfile: ownerProfile ?? this.ownerProfile,
       isOnboardingComplete: isOnboardingComplete ?? this.isOnboardingComplete,
+      reviewSummary: reviewSummary ?? this.reviewSummary,
     );
   }
 
@@ -208,13 +218,23 @@ class UserModel {
   }
 
   double? get rating {
-    if (isWalker) return walkerProfile?.averageRating;
-    return null;
+    return reviewSummary?.averageRating;
   }
 
   int? get totalReviews {
-    if (isWalker) return walkerProfile?.totalReviews;
-    return null;
+    return reviewSummary?.totalReviews;
+  }
+
+  bool get hasReviews => reviewSummary?.hasReviews ?? false;
+
+  String get formattedRating => reviewSummary?.formattedRating ?? '0.0';
+
+  Map<int, int> get ratingBreakdown => reviewSummary?.ratingBreakdown ?? {};
+
+  // Check if a specific user can review this user
+  bool canBeReviewedBy(String reviewerId) {
+    // Users can only review their connections
+    return connections.contains(reviewerId);
   }
 
   // Default settings

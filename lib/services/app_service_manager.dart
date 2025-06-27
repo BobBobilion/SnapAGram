@@ -448,6 +448,21 @@ class AppServiceManager extends ChangeNotifier {
     );
   }
 
+  Future<void> deleteChat(String chatId) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    await ChatDatabaseService.deleteChat(chatId);
+  }
+
+  Future<void> archiveChat(String chatId) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    await ChatDatabaseService.archiveChat(chatId);
+  }
+
+  Future<void> unarchiveChat(String chatId) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+    await ChatDatabaseService.unarchiveChat(chatId);
+  }
+
   // Stream subscriptions for real-time updates
   Stream<UserModel?> get currentUserStream {
     return auth.userStream;

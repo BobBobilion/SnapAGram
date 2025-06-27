@@ -7,6 +7,8 @@ import '../../models/user_model.dart';
 import '../../utils/app_theme.dart';
 import 'add_friends_screen.dart';
 import '../chats/chat_conversation_screen.dart';
+import '../profile/public_profile_screen.dart';
+
 
 class FriendsScreen extends ConsumerStatefulWidget {
   const FriendsScreen({super.key});
@@ -590,12 +592,6 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     );
   }
 
-  void _showFriendProfile(UserModel friend) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${friend.displayName}\'s profile coming soon!')),
-    );
-  }
-
   Future<void> _startChatWithFriend(UserModel friend) async {
     try {
       // Create or get existing direct chat
@@ -626,4 +622,14 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
       }
     }
   }
-} 
+
+  void _showFriendProfile(UserModel friend) {
+    // Navigate to friend's profile screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PublicProfileScreen(userId: friend.uid),
+      ),
+    );
+  }
+}

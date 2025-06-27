@@ -28,8 +28,8 @@ class ChatDatabaseService {
         type: ChatType.direct,
         participants: [userId1, userId2],
         participantNames: {
-          userId1: users.firstWhere((u) => u.uid == userId1).handle,
-          userId2: users.firstWhere((u) => u.uid == userId2).handle,
+          userId1: users.firstWhere((u) => u.uid == userId1).displayName,
+          userId2: users.firstWhere((u) => u.uid == userId2).displayName,
         },
         participantAvatars: {
           userId1: users.firstWhere((u) => u.uid == userId1).profilePictureUrl ?? '',
@@ -39,6 +39,7 @@ class ChatDatabaseService {
         updatedAt: now,
         createdBy: userId1,
         isEncrypted: true, // Direct chats are encrypted by default
+        isActive: true, // Ensure new chats are active
       );
 
       await _chatsCollection.doc(chatId).set(chat.toMap());
@@ -79,7 +80,7 @@ class ChatDatabaseService {
       final memberRoles = <String, String>{};
 
       for (final user in users) {
-        participantNames[user.uid] = user.handle;
+        participantNames[user.uid] = user.displayName;
         participantAvatars[user.uid] = user.profilePictureUrl ?? '';
         memberRoles[user.uid] = user.uid == creatorId ? 'admin' : 'member';
       }
@@ -98,6 +99,7 @@ class ChatDatabaseService {
         updatedAt: now,
         createdBy: creatorId,
         isEncrypted: true, // Group chats are encrypted
+        isActive: true, // Ensure new group chats are active
       );
 
       await _chatsCollection.doc(chatId).set(chat.toMap());
@@ -143,13 +145,16 @@ class ChatDatabaseService {
     try {
       final snapshot = await _chatsCollection
           .where('participants', arrayContains: userId)
-          .where('isActive', isEqualTo: true)
+          // .where('isActive', isEqualTo: true) // Removed to fetch all chats
           .orderBy('updatedAt', descending: true)
           .get();
 
-      return snapshot.docs
+      final chats = snapshot.docs
           .map((doc) => ChatModel.fromSnapshot(doc))
           .toList();
+      
+      // Return all chats - let the UI handle filtering
+      return chats;
     } catch (e) {
       throw Exception('Failed to get user chats: $e');
     }
@@ -348,7 +353,7 @@ class ChatDatabaseService {
 
       await _chatsCollection.doc(chatId).update({
         'participants': FieldValue.arrayUnion([memberId]),
-        'participantNames.$memberId': newMember.handle,
+        'participantNames.$memberId': newMember.displayName,
         'participantAvatars.$memberId': newMember.profilePictureUrl ?? '',
         'memberRoles.$memberId': 'member',
         'updatedAt': Timestamp.fromDate(DateTime.now()),
@@ -426,12 +431,16 @@ class ChatDatabaseService {
   static Stream<List<ChatModel>> listenToUserChats(String userId) {
     return _chatsCollection
         .where('participants', arrayContains: userId)
-        .where('isActive', isEqualTo: true)
+        // .where('isActive', isEqualTo: true) // Removed to fetch all chats
         .orderBy('updatedAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ChatModel.fromSnapshot(doc))
-            .toList());
+        .map((snapshot) {
+      final chats = snapshot.docs
+          .map((doc) => ChatModel.fromSnapshot(doc))
+          .toList();
+      // Manually filter for active chats client-side
+      return chats.where((chat) => chat.isActive).toList();
+    });
   }
 
   // Listen to specific chat stream
@@ -459,6 +468,55 @@ class ChatDatabaseService {
         return '📍 Location';
       case MessageType.contact:
         return '👤 Contact';
+      default:
+        return 'New message';
+    }
+  }
+
+  static Future<void> deleteChat(String chatId) async {
+    try {
+      // Get the chat first to verify it exists
+      final chat = await getChatById(chatId);
+      if (chat == null) {
+        throw Exception('Chat not found');
+      }
+
+      // Delete all messages in the chat
+      final messagesSnapshot = await _messagesCollection
+          .where('chatId', isEqualTo: chatId)
+          .get();
+
+      final batch = _firestore.batch();
+      
+      // Delete all messages
+      for (final doc in messagesSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // Delete the chat document
+      batch.delete(_chatsCollection.doc(chatId));
+      
+      await batch.commit();
+    } catch (e) {
+      throw Exception('Failed to delete chat: $e');
+    }
+  }
+
+  // Archive chat (soft delete)
+  static Future<void> archiveChat(String chatId) async {
+    try {
+      await _chatsCollection.doc(chatId).update({'isActive': false});
+    } catch (e) {
+      throw Exception('Failed to archive chat: $e');
+    }
+  }
+
+  // Unarchive chat (restore from soft delete)
+  static Future<void> unarchiveChat(String chatId) async {
+    try {
+      await _chatsCollection.doc(chatId).update({'isActive': true});
+    } catch (e) {
+      throw Exception('Failed to unarchive chat: $e');
     }
   }
 } 

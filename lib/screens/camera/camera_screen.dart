@@ -1,13 +1,24 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:camera/camera.dart';
 import 'package:deepar_flutter_plus/deepar_flutter_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:camera/camera.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:photo_view/photo_view.dart';
+import 'package:video_player/video_player.dart';
+
 import '../../services/auth_service.dart';
+import '../../services/story_database_service.dart';
+import '../../services/user_database_service.dart';
 import '../../utils/app_theme.dart';
 import 'photo_editor_screen.dart';
 import 'video_editor_screen.dart';
@@ -516,6 +527,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
               );
             },
           ),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildModeButton('photo', 'Photo'),
+            const SizedBox(width: 20),
+            _buildModeButton('video', 'Video'),
+          ],
         ),
         Container(
           padding: const EdgeInsets.all(24),

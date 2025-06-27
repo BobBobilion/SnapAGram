@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:snapagram/providers/ui_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 import '../../utils/app_theme.dart';
@@ -19,7 +20,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  int _currentIndex = 0;
   late List<Widget> _screens;
   late PageController _pageController;
 
@@ -28,10 +28,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _pageController =
+        PageController(initialPage: ref.read(bottomNavIndexProvider));
     _screens = [
       const ExploreScreen(),
-      const FriendsScreen(), 
+      const FriendsScreen(),
       const ChatsScreen(),
       AccountScreen(onNavigateToTab: _navigateToTab),
     ];
@@ -44,33 +45,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _navigateToTab(int index) {
-    // Handle camera button differently since it's not a page
-    if (index == 2) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const CameraScreen(),
-        ),
-      );
-      return;
-    }
-    
-    // Convert bottom nav index to page index (skipping camera)
-    int pageIndex = index;
-    if (index > 2) pageIndex = index - 1; // Account tab becomes page 3
-    
-    setState(() {
-      _currentIndex = index;
-    });
-    _pageController.animateToPage(
-      pageIndex,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+    ref.read(bottomNavIndexProvider.notifier).state = index;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Listen to the provider to command the page controller
+    ref.listen<int>(bottomNavIndexProvider, (prev, next) {
+      // Handle camera button differently since it's not a page
+      if (next == 2) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CameraScreen(),
+          ),
+        ).then((_) {
+          // When returning from camera, restore previous index
+          // to prevent camera tab from looking "selected"
+          ref.read(bottomNavIndexProvider.notifier).state = prev ?? 0;
+        });
+        return;
+      }
+
+      // Convert bottom nav index to page index (skipping camera)
+      int pageIndex = next;
+      if (next > 2) pageIndex = next - 1; // Account tab becomes page 3
+
+      if (_pageController.hasClients && _pageController.page?.round() != pageIndex) {
+        _pageController.animateToPage(
+          pageIndex,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+
     // Redirect to LoginScreen if the user becomes unauthenticated
     final isAuthenticated = ref.watch(authServiceProvider).isAuthenticated;
     if (!isAuthenticated) {
@@ -94,10 +103,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // Convert page index back to bottom nav index (accounting for camera)
           int bottomNavIndex = index;
           if (index >= 2) bottomNavIndex = index + 1; // Skip camera index
-          
-          setState(() {
-            _currentIndex = bottomNavIndex;
-          });
+
+          // Update provider instead of local state
+          ref.read(bottomNavIndexProvider.notifier).state = bottomNavIndex;
         },
         children: _screens,
       ),
@@ -193,7 +201,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }) {
     final authService = ref.watch(authServiceProvider);
     final user = authService.userModel;
-    final isSelected = _currentIndex == index;
+    final isSelected = ref.watch(bottomNavIndexProvider) == index;
     
     // Check if this is the chats tab and get unread count
     final isChatsTab = index == 3;
@@ -209,6 +217,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Stack(
+            clipBehavior: Clip.none,
             children: [
               Icon(
                 icon,

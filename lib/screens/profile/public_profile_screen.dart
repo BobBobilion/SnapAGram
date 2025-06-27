@@ -5,8 +5,13 @@ import 'package:snapagram/models/owner_profile.dart';
 import 'package:snapagram/models/walker_profile.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_database_service.dart';
+import '../../services/review_service.dart';
 import '../../models/user_model.dart';
+import '../../models/review.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/rating_display_widget.dart';
+import '../../widgets/reviews_list_widget.dart';
+import '../../widgets/review_submission_dialog.dart';
 import '../account/my_stories_screen.dart';
 
 class PublicProfileScreen extends ConsumerWidget {
@@ -55,6 +60,8 @@ class PublicProfileScreen extends ConsumerWidget {
                   _buildProfileCard(context, userModel),
                   const SizedBox(height: 24),
                   _buildQuickStats(context, userModel),
+                  const SizedBox(height: 24),
+                  _buildReviewsSection(context, ref, userModel, currentUser),
                 ],
               ),
             );
@@ -773,6 +780,211 @@ class PublicProfileScreen extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildReviewsSection(BuildContext context, WidgetRef ref, UserModel userModel, UserModel? currentUser) {
+    // Only show reviews section if current user is friends with the profile owner
+    if (currentUser == null || currentUser.uid == userModel.uid) {
+      return const SizedBox.shrink();
+    }
+
+    final isFriend = currentUser.connections.contains(userModel.uid);
+    if (!isFriend) {
+      return const SizedBox.shrink();
+    }
+
+    final reviewService = ref.watch(reviewServiceProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Reviews Header with Rating Summary
+        FutureBuilder<ReviewSummary?>(
+          future: reviewService.getReviewSummary(userModel.uid),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox.shrink();
+            }
+
+            final reviewSummary = snapshot.data;
+            if (reviewSummary == null || !reviewSummary.hasReviews) {
+              return _buildNoReviewsCard(context, ref, userModel, currentUser);
+            }
+
+            return _buildReviewsSummaryCard(context, reviewSummary, userModel);
+          },
+        ),
+        const SizedBox(height: 16),
+        // Reviews List
+        Container(
+          constraints: const BoxConstraints(maxHeight: 400),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: ReviewsListWidget(
+              userId: userModel.uid,
+              showUserInfo: true,
+              physics: const AlwaysScrollableScrollPhysics(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReviewsSummaryCard(BuildContext context, ReviewSummary reviewSummary, UserModel userModel) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.rate_review,
+                  size: 24,
+                  color: AppTheme.getPrimaryColor(userModel),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Reviews',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const Spacer(),
+                RatingDisplayWidget(
+                  reviewSummary: reviewSummary,
+                  compact: true,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            RatingDisplayWidget(
+              reviewSummary: reviewSummary,
+              showBreakdown: true,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoReviewsCard(BuildContext context, WidgetRef ref, UserModel userModel, UserModel currentUser) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.rate_review,
+                  size: 24,
+                  color: AppTheme.getPrimaryColor(userModel),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Reviews',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const Spacer(),
+                FutureBuilder<bool>(
+                  future: ref.read(reviewServiceProvider).canUserReview(currentUser.uid, userModel.uid),
+                  builder: (context, snapshot) {
+                    final canReview = snapshot.data ?? false;
+                    if (!canReview) return const SizedBox.shrink();
+                    
+                    return TextButton.icon(
+                      onPressed: () => _showReviewDialog(context, ref, currentUser, userModel),
+                      icon: Icon(
+                        Icons.add_comment,
+                        size: 16,
+                        color: AppTheme.getPrimaryColor(userModel),
+                      ),
+                      label: Text(
+                        'Write Review',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.getPrimaryColor(userModel),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.rate_review_outlined,
+                    size: 48,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No reviews yet',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Be the first to leave a review!',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.grey[500],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showReviewDialog(BuildContext context, WidgetRef ref, UserModel currentUser, UserModel targetUser) {
+    showDialog(
+      context: context,
+      builder: (context) => ReviewSubmissionDialog(
+        currentUser: currentUser,
+        targetUser: targetUser,
+      ),
     );
   }
 }
