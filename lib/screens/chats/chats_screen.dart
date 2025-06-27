@@ -7,6 +7,7 @@ import '../../models/chat_model.dart';
 import '../../models/user_model.dart';
 import '../../utils/app_theme.dart';
 import 'chat_conversation_screen.dart';
+import '../../services/notification_service.dart';
 
 class ChatsScreen extends ConsumerStatefulWidget {
   const ChatsScreen({super.key});
@@ -25,6 +26,11 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
   void initState() {
     super.initState();
     _loadChats();
+    
+    // Mark all chats as read when user opens chats screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _markAllChatsAsRead();
+    });
   }
 
   @override
@@ -60,20 +66,55 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
     }
   }
 
+  Future<void> _markAllChatsAsRead() async {
+    try {
+      final serviceManager = ref.read(appServiceManagerProvider);
+      final currentUserId = serviceManager.currentUserId;
+      if (currentUserId != null) {
+        await NotificationService.markAllChatsAsRead(currentUserId);
+      }
+    } catch (e) {
+      print('Error marking chats as read: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authService = ref.watch(authServiceProvider);
     final userModel = authService.userModel;
+    final unreadCount = ref.watch(unreadMessageCountProvider).value ?? 0;
     
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(
-          'Chats',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
-          ),
+        title: Row(
+          children: [
+            Text(
+              'Chats',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+            ),
+            if (unreadCount > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  unreadCount > 99 ? '99+' : unreadCount.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         backgroundColor: Colors.white,
         elevation: 1,
@@ -200,19 +241,24 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
     final avatarUrl = chat.getChatAvatarUrl(currentUserId);
     final lastMessageTime = chat.lastMessageTime;
     
+    final isAvatarUrlValid = avatarUrl != null && (Uri.tryParse(avatarUrl)?.host.isNotEmpty ?? false);
+    
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 1,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
+      color: AppTheme.getColorShade(userModel, 50),
       child: ListTile(
         leading: Stack(
           children: [
             CircleAvatar(
               backgroundColor: isGroup ? Colors.orange[100] : AppTheme.getColorShade(userModel, 100),
-              backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-              child: avatarUrl == null
+              backgroundImage: isAvatarUrlValid
+                  ? NetworkImage(avatarUrl!)
+                  : null,
+              child: !isAvatarUrlValid
                   ? Icon(
                       isGroup ? Icons.group : Icons.person,
                       color: isGroup ? Colors.orange[600] : AppTheme.getPrimaryColor(userModel),
@@ -242,6 +288,20 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
                   ),
                 ),
               ),
+            // Online/Offline status dot
+            Positioned(
+              top: 0,
+              left: 0,
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: Colors.green, // Online status
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+            ),
           ],
         ),
         title: Text(

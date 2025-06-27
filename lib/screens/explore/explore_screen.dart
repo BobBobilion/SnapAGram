@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:snapagram/models/enums.dart';
 import 'package:video_player/video_player.dart';
 import 'package:snapagram/screens/profile/public_profile_screen.dart';
 import '../../services/app_service_manager.dart';
@@ -314,12 +315,15 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         story.hasUserLiked(ref.read(appServiceManagerProvider).currentUserId ?? '');
     final isViewed =
         story.hasUserViewed(ref.read(appServiceManagerProvider).currentUserId ?? '');
+    final cardColor =
+        story.creatorRole == UserRole.walker ? Colors.green : Colors.blue;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cardColor.withOpacity(0.5), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -335,9 +339,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
             },
             child: ListTile(
               leading: CircleAvatar(
-                backgroundColor: storyType == 'friends'
-                    ? Colors.green[100]
-                    : AppTheme.getColorShade(userModel, 100),
+                backgroundColor: cardColor.withOpacity(0.1),
                 backgroundImage: story.creatorProfilePicture != null
                     ? NetworkImage(story.creatorProfilePicture!)
                     : null,
@@ -347,9 +349,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                             ? story.creatorUsername[0].toUpperCase()
                             : 'U',
                         style: TextStyle(
-                          color: storyType == 'friends'
-                              ? Colors.green[600]
-                              : AppTheme.getColorShade(userModel, 600),
+                          color: cardColor,
                           fontWeight: FontWeight.bold,
                         ),
                       )

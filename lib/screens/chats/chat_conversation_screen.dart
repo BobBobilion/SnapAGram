@@ -13,6 +13,7 @@ import '../../models/message_model.dart';
 import '../../models/user_model.dart';
 import '../../models/enums.dart';
 import '../../utils/app_theme.dart';
+import '../profile/public_profile_screen.dart';
 
 class ChatConversationScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -297,10 +298,19 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
         
         // Load other user's data for direct chats
         if (chat.type == ChatType.direct) {
-          final otherUserId = chat.getOtherParticipant(serviceManager.currentUserId ?? '');
-          if (otherUserId != null) {
+          String? otherUserId = chat.getOtherParticipant(serviceManager.currentUserId ?? '');
+          
+          // If otherUserId is not available from chat, use the parameter
+          if (otherUserId == null || otherUserId.isEmpty) {
+            otherUserId = widget.otherUserId;
+          }
+          
+          if (otherUserId != null && otherUserId.isNotEmpty) {
             final otherUser = await serviceManager.getUserById(otherUserId);
             setState(() => _otherUser = otherUser);
+            print('✅ Loaded other user: ${otherUser?.displayName} (${otherUser?.isOnline})');
+          } else {
+            print('❌ Could not determine other user ID');
           }
         }
       }
@@ -719,55 +729,84 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: Colors.grey[300],
-              backgroundImage: _otherUser?.profilePictureUrl != null
-                  ? NetworkImage(_otherUser!.profilePictureUrl!)
-                  : null,
-              child: _otherUser?.profilePictureUrl == null
-                  ? Text(
-                      _getRecipientName().isNotEmpty 
-                          ? _getRecipientName()[0].toUpperCase()
-                          : 'U',
-                      style: GoogleFonts.poppins(
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+        title: GestureDetector(
+          onTap: () {
+            if (_otherUser != null) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => PublicProfileScreen(userId: _otherUser!.uid),
+                ),
+              );
+            }
+          },
+          child: Row(
+            children: [
+              Stack(
                 children: [
-                  Text(
-                    _getRecipientName(),
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                      fontSize: 16,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppTheme.getColorShade(userModel, 100),
+                    backgroundImage: _otherUser?.profilePictureUrl != null && _otherUser!.profilePictureUrl!.isNotEmpty
+                        ? NetworkImage(_otherUser!.profilePictureUrl!)
+                        : null,
+                    child: _otherUser?.profilePictureUrl == null || _otherUser!.profilePictureUrl!.isEmpty
+                        ? Text(
+                            _getRecipientName().isNotEmpty 
+                                ? _getRecipientName()[0].toUpperCase()
+                                : 'U',
+                            style: GoogleFonts.poppins(
+                              color: AppTheme.getColorShade(userModel, 600),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          )
+                        : null,
                   ),
-                  Text(
-                    _getOnlineStatus(),
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      color: _getOnlineStatusColor(),
-                      fontWeight: FontWeight.w400,
+                  // Online/Offline status dot
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: _otherUser?.isOnline == true ? Colors.green : Colors.red,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _getRecipientName(),
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                        fontSize: 16,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      _getOnlineStatus(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: _getOnlineStatusColor(),
+                        fontWeight: FontWeight.w400,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
@@ -1197,18 +1236,16 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
   }
 
   Widget _buildTextRecommendations(UserModel? userModel) {
-    print('🎨 Building text recommendations UI:');
-    print('   - _showRecommendations: $_showRecommendations');
-    print('   - _textRecommendations.length: ${_textRecommendations.length}');
-    print('   - _isLoadingRecommendations: $_isLoadingRecommendations');
-    
-    // Show recommendations if we're loading OR if we have recommendations OR if we should show them
-    if (!_showRecommendations && _textRecommendations.isEmpty && !_isLoadingRecommendations) {
-      print('   - Skipping recommendations display');
+    // print('🎨 Building text recommendations UI:');
+    // print('   - _showRecommendations: $_showRecommendations');
+    // print('   - _textRecommendations.length: ${_textRecommendations.length}');
+    // print('   - _isLoadingRecommendations: $_isLoadingRecommendations');
+
+    if (!_showRecommendations || _textRecommendations.isEmpty) {
+      // print('   - Not displaying recommendations');
       return const SizedBox.shrink();
     }
-
-    print('   - Displaying recommendations');
+    // print('   - Displaying recommendations');
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Column(

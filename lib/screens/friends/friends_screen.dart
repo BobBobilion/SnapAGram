@@ -375,7 +375,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
       margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: AppTheme.getColorShade(userModel, 50),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[200]!),
       ),
@@ -385,10 +385,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
           CircleAvatar(
             radius: 24,
             backgroundColor: AppTheme.getColorShade(userModel, 100),
-            backgroundImage: user.profilePictureUrl != null
+            backgroundImage: user.profilePictureUrl != null && user.profilePictureUrl!.isNotEmpty
                 ? NetworkImage(user.profilePictureUrl!)
                 : null,
-            child: user.profilePictureUrl == null
+            child: user.profilePictureUrl == null || user.profilePictureUrl!.isEmpty
                 ? Text(
                     user.displayName.isNotEmpty 
                         ? user.displayName[0].toUpperCase()
@@ -504,23 +504,42 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
+      color: AppTheme.getColorShade(userModel, 50),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: AppTheme.getColorShade(userModel, 100),
-          backgroundImage: friend.profilePictureUrl != null
-              ? NetworkImage(friend.profilePictureUrl!)
-              : null,
-          child: friend.profilePictureUrl == null
-              ? Text(
-                  friend.displayName.isNotEmpty 
-                      ? friend.displayName[0].toUpperCase()
-                      : 'F',
-                  style: TextStyle(
-                    color: AppTheme.getColorShade(userModel, 600),
-                    fontWeight: FontWeight.bold,
-                  ),
-                )
-              : null,
+        leading: Stack(
+          children: [
+            CircleAvatar(
+              backgroundColor: AppTheme.getColorShade(userModel, 100),
+              backgroundImage: friend.profilePictureUrl != null && friend.profilePictureUrl!.isNotEmpty
+                  ? NetworkImage(friend.profilePictureUrl!)
+                  : null,
+              child: friend.profilePictureUrl == null || friend.profilePictureUrl!.isEmpty
+                  ? Text(
+                      friend.displayName.isNotEmpty 
+                          ? friend.displayName[0].toUpperCase()
+                          : 'F',
+                      style: TextStyle(
+                        color: AppTheme.getColorShade(userModel, 600),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+            // Online/Offline status dot
+            Positioned(
+              top: 0,
+              left: 0,
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: friend.isOnline ? Colors.green : Colors.red,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+            ),
+          ],
         ),
         title: Text(
           friend.displayName,
@@ -551,59 +570,20 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ),
           ],
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Message Button
-            Container(
-              decoration: BoxDecoration(
-                color: AppTheme.getColorShade(userModel, 600),
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.message, color: Colors.white, size: 20),
-                onPressed: () => _startChatWithFriend(friend),
-                padding: const EdgeInsets.all(8),
-                constraints: const BoxConstraints(
-                  minWidth: 36,
-                  minHeight: 36,
-                ),
-              ),
+        trailing: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.getColorShade(userModel, 600),
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.message, color: Colors.white, size: 20),
+            onPressed: () => _startChatWithFriend(friend),
+            padding: const EdgeInsets.all(8),
+            constraints: const BoxConstraints(
+              minWidth: 36,
+              minHeight: 36,
             ),
-            const SizedBox(width: 8),
-            // Online Status
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: friend.isOnline ? Colors.green[100] : Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!friend.isOnline)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: Colors.red[500],
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  if (!friend.isOnline)
-                    const SizedBox(width: 4),
-                  Text(
-                    friend.isOnline ? 'Online' : 'Offline',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: friend.isOnline ? Colors.green[700] : Colors.grey[700],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
         onTap: () => _showFriendProfile(friend),
       ),

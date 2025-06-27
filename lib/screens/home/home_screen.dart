@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import '../../utils/app_theme.dart';
 import '../auth/login_screen.dart';
 import '../explore/explore_screen.dart';
@@ -194,6 +195,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final user = authService.userModel;
     final isSelected = _currentIndex == index;
     
+    // Check if this is the chats tab and get unread count
+    final isChatsTab = index == 3;
+    final unreadCount = isChatsTab 
+        ? ref.watch(unreadMessageCountProvider).value ?? 0
+        : 0;
+    
     return GestureDetector(
       onTap: () {
         _navigateToTab(index);
@@ -201,10 +208,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            color: AppTheme.getIconColor(user, isSelected),
-            size: 24,
+          Stack(
+            children: [
+              Icon(
+                icon,
+                color: AppTheme.getIconColor(user, isSelected),
+                size: 24,
+              ),
+              if (isChatsTab && unreadCount > 0)
+                Positioned(
+                  right: -6,
+                  top: -6,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      unreadCount > 99 ? '99+' : unreadCount.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(

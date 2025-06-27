@@ -41,6 +41,7 @@ class StoryDatabaseService {
         id: storyId,
         uid: uid,
         creatorUsername: user.handle,
+        creatorRole: user.role,
         creatorProfilePicture: user.profilePictureUrl,
         type: type,
         visibility: visibility,

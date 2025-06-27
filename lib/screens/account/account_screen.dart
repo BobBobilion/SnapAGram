@@ -135,6 +135,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
+      color: AppTheme.getColorShade(userModel, 50),
       child: Stack(
         children: [
           Padding(
@@ -409,7 +410,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     Text(
                       ownerProfile.dogName,
                       style: GoogleFonts.poppins(
-                        fontSize: 18,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: Colors.grey[800],
                       ),
@@ -452,6 +453,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         color: Colors.grey[700],
                         fontStyle: FontStyle.italic,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),
@@ -459,7 +461,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   left: 16,
                   top: 2,
                   child: Container(
-                    color: Colors.white,
+                    color: Colors.grey[50],
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: Text(
                       'Bio',
@@ -959,6 +961,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           onTap: () => _showRedoOnboardingDialog(context),
         ),
         const SizedBox(height: 8),
+        
         // Commented out placeholder features
         /*
         _buildSettingsCard(

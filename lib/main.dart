@@ -16,10 +16,12 @@ void main() async {
   // Load environment variables from assets
   await dotenv.load(fileName: ".env");
   
+  // Initialize Firebase
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   }
-  runApp(const MyApp());
+  
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {

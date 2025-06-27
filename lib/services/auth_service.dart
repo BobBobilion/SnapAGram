@@ -6,11 +6,12 @@ import '../models/user_model.dart';
 import 'user_service.dart';
 import 'handle_service.dart';
 
-final authServiceProvider = ChangeNotifierProvider((ref) => AuthService(ref));
+final authServiceProvider =
+    ChangeNotifierProvider((ref) => AuthService(ref, auth: FirebaseAuth.instance));
 
 class AuthService extends ChangeNotifier {
   final Ref _ref;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseAuth auth;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   User? _user;
   UserModel? _userModel;
@@ -19,22 +20,23 @@ class AuthService extends ChangeNotifier {
   UserModel? get userModel => _userModel;
   bool get isAuthenticated => _user != null;
 
-  AuthService(this._ref) {
-    _auth.authStateChanges().listen(_onAuthStateChanged);
+  AuthService(this._ref, {required this.auth}) {
+    auth.authStateChanges().listen(_onAuthStateChanged);
   }
 
   Future<void> _onAuthStateChanged(User? user) async {
     print('AuthService: Auth state changed - user: ${user?.email}');
     _user = user;
-    
+
     if (user != null) {
       final userService = _ref.read(userServiceProvider);
       try {
         await userService.updateOnlineStatus(user.uid, true);
         _userModel = await userService.getUserById(user.uid);
-        
+
         if (_userModel == null) {
-          print('AuthService: User document not found for ${user.uid}, user needs onboarding');
+          print(
+              'AuthService: User document not found for ${user.uid}, user needs onboarding');
         } else {
           if (_userModel!.handle.isEmpty) {
             try {
@@ -56,8 +58,9 @@ class AuthService extends ChangeNotifier {
       }
       _userModel = null;
     }
-    
-    print('AuthService: Calling notifyListeners - isAuthenticated: ${_user != null}');
+
+    print(
+        'AuthService: Calling notifyListeners - isAuthenticated: ${_user != null}');
     notifyListeners();
   }
 
@@ -67,11 +70,11 @@ class AuthService extends ChangeNotifier {
     required String displayName,
   }) async {
     try {
-      UserCredential result = await _auth.createUserWithEmailAndPassword(
+      UserCredential result = await auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-      
+
       if (result.user != null) {
         final userService = _ref.read(userServiceProvider);
         await userService.createUserProfile(
@@ -80,11 +83,11 @@ class AuthService extends ChangeNotifier {
           displayName: displayName,
           profilePictureUrl: result.user!.photoURL,
         );
-        
+
         await result.user!.updateDisplayName(displayName);
         _userModel = await userService.getUserById(result.user!.uid);
       }
-      
+
       return result;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
@@ -94,7 +97,7 @@ class AuthService extends ChangeNotifier {
   Future<UserCredential?> signInWithEmailAndPassword(
       String email, String password) async {
     try {
-      UserCredential result = await _auth.signInWithEmailAndPassword(
+      UserCredential result = await auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
@@ -108,23 +111,24 @@ class AuthService extends ChangeNotifier {
     try {
       await _googleSignIn.signOut();
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
+
       if (googleUser == null) {
         throw Exception('Google Sign-In was cancelled');
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      UserCredential result = await _auth.signInWithCredential(credential);
-      
+      UserCredential result = await auth.signInWithCredential(credential);
+
       if (result.user != null) {
         final userService = _ref.read(userServiceProvider);
         _userModel = await userService.getUserById(result.user!.uid);
-        
+
         if (_userModel == null) {
           final displayName = result.user!.displayName ?? 'User';
           await userService.createUserProfile(
@@ -136,10 +140,11 @@ class AuthService extends ChangeNotifier {
           _userModel = await userService.getUserById(result.user!.uid);
         }
       }
-      
+
       return result;
     } on FirebaseAuthException catch (e) {
-      print('FirebaseAuthException in Google Sign-In: ${e.code} - ${e.message}');
+      print(
+          'FirebaseAuthException in Google Sign-In: ${e.code} - ${e.message}');
       throw _handleAuthException(e);
     } catch (e) {
       print('Exception in Google Sign-In: $e');
@@ -150,7 +155,8 @@ class AuthService extends ChangeNotifier {
         throw Exception('Network error. Please check your internet connection.');
       }
       if (e.toString().contains('sign_in_failed')) {
-        throw Exception('Google Sign-In failed. Please check your Google account settings and try again.');
+        throw Exception(
+            'Google Sign-In failed. Please check your Google account settings and try again.');
       }
       throw Exception('Google Sign-In failed: $e');
     }
@@ -162,12 +168,12 @@ class AuthService extends ChangeNotifier {
         final userService = _ref.read(userServiceProvider);
         await userService.updateOnlineStatus(_userModel!.uid, false);
       }
-      
+
       await Future.wait([
-        _auth.signOut(),
+        auth.signOut(),
         _googleSignIn.signOut(),
       ]);
-      
+
       _userModel = null;
     } catch (e) {
       throw Exception('Failed to sign out: $e');
@@ -180,12 +186,12 @@ class AuthService extends ChangeNotifier {
         final userService = _ref.read(userServiceProvider);
         await userService.updateOnlineStatus(_userModel!.uid, false);
       }
-      
+
       await Future.wait([
-        _auth.signOut(),
+        auth.signOut(),
         _googleSignIn.disconnect(),
       ]);
-      
+
       _userModel = null;
     } catch (e) {
       throw Exception('Failed to sign out with Google disconnect: $e');
@@ -194,7 +200,7 @@ class AuthService extends ChangeNotifier {
 
   Future<void> resetPassword(String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email);
+      await auth.sendPasswordResetEmail(email: email);
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     }
@@ -208,20 +214,20 @@ class AuthService extends ChangeNotifier {
     try {
       if (_user == null) throw Exception('User not authenticated');
       final userService = _ref.read(userServiceProvider);
-      
+
       if (displayName != null) await _user!.updateDisplayName(displayName);
       if (photoURL != null) await _user!.updatePhotoURL(photoURL);
-      
+
       final updates = <String, dynamic>{};
       if (displayName != null) updates['displayName'] = displayName;
       if (photoURL != null) updates['profilePictureUrl'] = photoURL;
       if (bio != null) updates['bio'] = bio;
-      
+
       if (updates.isNotEmpty) {
         await userService.updateUserProfile(_user!.uid, updates);
         _userModel = await userService.getUserById(_user!.uid);
       }
-      
+
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to update profile: $e');
@@ -232,11 +238,11 @@ class AuthService extends ChangeNotifier {
     try {
       if (_user == null) throw Exception('User not authenticated');
       final userService = _ref.read(userServiceProvider);
-      
+
       await _user!.updateDisplayName(newDisplayName);
       await userService.updateHandle(_user!.uid, newDisplayName);
       _userModel = await userService.getUserById(_user!.uid);
-      
+
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to update display name: $e');
@@ -247,13 +253,13 @@ class AuthService extends ChangeNotifier {
     try {
       if (_user == null) throw Exception('User not authenticated');
       final userService = _ref.read(userServiceProvider);
-      
+
       print('Updating handle to: $newHandle for user: ${_user!.uid}');
       await userService.updateHandle(_user!.uid, newHandle);
       print('Handle updated successfully in database');
       _userModel = await userService.getUserById(_user!.uid);
       print('New user model handle: ${_userModel?.handle}');
-      
+
       notifyListeners();
     } catch (e) {
       print('Error in updateHandle: $e');
@@ -262,7 +268,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Stream<UserModel?> get userStream {
-    return _auth.authStateChanges().asyncExpand((user) {
+    return auth.authStateChanges().asyncExpand((user) {
       if (user != null) {
         final userService = _ref.read(userServiceProvider);
         return userService.listenToUser(user.uid);
@@ -274,7 +280,8 @@ class AuthService extends ChangeNotifier {
 
   Future<bool> isHandleAvailable(String handle) async {
     final handleService = _ref.read(handleServiceProvider);
-    return await handleService.isHandleAvailable(handle, excludeUserId: _user?.uid);
+    return await handleService.isHandleAvailable(handle,
+        excludeUserId: _user?.uid);
   }
 
   Future<void> reloadUserModel() async {
@@ -291,14 +298,14 @@ class AuthService extends ChangeNotifier {
   Future<void> deleteAccount() async {
     try {
       if (_user == null) throw Exception('User not authenticated');
-      
+
       // This needs a more complete implementation once other services are refactored
-      // await userService.deleteUserData(_user!.uid); 
-      
+      // await userService.deleteUserData(_user!.uid);
+
       await _user!.delete();
       _user = null;
       _userModel = null;
-      
+
       notifyListeners();
     } on FirebaseAuthException catch (e) {
       throw Exception('Failed to delete account: ${_handleAuthException(e)}');

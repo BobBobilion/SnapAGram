@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:deepar_flutter_plus/deepar_flutter_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -16,9 +20,8 @@ class CameraScreen extends ConsumerStatefulWidget {
 }
 
 class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBindingObserver {
-  CameraController? _cameraController;
-  List<CameraDescription> _cameras = [];
   bool _isInitialized = false;
+  bool _isFlashOn = false;
   FlashMode _flashMode = FlashMode.off;
   bool _isFrontCamera = false;
   bool _isRecording = false;
@@ -26,6 +29,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   int _recordingDuration = 0;
   bool _showGrid = false;
   bool _permissionGranted = false;
+  final DeepArControllerPlus _deepArController = DeepArControllerPlus();
+  String _currentEffect = 'none';
+  List<String> _effects = [
+    'none',
+    'assets/effects/viking_helmet.deepar',
+    'assets/effects/MakeupLook.deepar',
+    'assets/effects/Neon_Devil_Horns.deepar',
+    'assets/effects/flower_face.deepar',
+    'assets/effects/Stallone.deepar',
+  ];
 
   @override
   void initState() {
@@ -37,32 +50,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    
-    // Stop video recording if active
-    if (_isRecording && _cameraController?.value.isRecordingVideo == true) {
-      _cameraController?.stopVideoRecording().catchError((e) {
-        debugPrint('Error stopping video recording on dispose: $e');
-        throw e;
-      });
-    }
-    
-    _cameraController?.dispose();
+    _deepArController.destroy();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? cameraController = _cameraController;
-
-    if (cameraController == null || !cameraController.value.isInitialized) {
-      return;
+    if (state == AppLifecycleState.paused) {
+      _deepArController.destroy();
     }
-
-    if (state == AppLifecycleState.inactive) {
-      cameraController.dispose();
-    } else if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed) {
       _initializeCamera();
     }
+    super.didChangeAppLifecycleState(state);
   }
 
   Future<void> _initializeCamera() async {
@@ -78,79 +78,35 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
 
       setState(() => _permissionGranted = true);
 
-      // Get available cameras
-      _cameras = await availableCameras();
-      if (_cameras.isEmpty) return;
-
-      // Initialize camera controller
-      _cameraController = CameraController(
-        _cameras[_isFrontCamera ? 1 : 0],
-        ResolutionPreset.high,
-        enableAudio: true,
+      // Initialize DeepAR
+      final dynamic result = await _deepArController.initialize(
+        androidLicenseKey: dotenv.env['DEEPAR_ANDROID_KEY']!,
+        iosLicenseKey: '',
       );
-
-      await _cameraController!.initialize();
       
-      if (mounted) {
+      bool isSuccess = false;
+      if (result is bool) {
+        isSuccess = result;
+      } else {
+        isSuccess = result.success;
+      }
+
+      if (mounted && isSuccess) {
         setState(() => _isInitialized = true);
+      } else {
+        debugPrint('Failed to initialize DeepAR');
       }
     } catch (e) {
       debugPrint('Camera initialization error: $e');
     }
   }
 
-  Future<void> _switchCamera() async {
-    if (_cameras.length < 2) return;
-    
-    setState(() {
-      _isFrontCamera = !_isFrontCamera;
-      _isInitialized = false;
-    });
-
-    await _cameraController?.dispose();
-    
-    _cameraController = CameraController(
-      _cameras[_isFrontCamera ? 1 : 0],
-      ResolutionPreset.high,
-      enableAudio: true,
-    );
-
-    try {
-      await _cameraController!.initialize();
-      if (mounted) {
-        setState(() => _isInitialized = true);
-      }
-    } catch (e) {
-      debugPrint('Camera switch error: $e');
-    }
-  }
-
-  Future<void> _toggleFlash() async {
-    if (_cameraController == null) return;
-    
-    setState(() {
-      _flashMode = _flashMode == FlashMode.off ? FlashMode.always : FlashMode.off;
-    });
-    
-    await _cameraController!.setFlashMode(_flashMode);
-  }
-
   Future<void> _capturePhoto() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
-
     try {
-      // Set flash mode for capture
-      await _cameraController!.setFlashMode(_flashMode);
+      final File? photoFile = await _deepArController.takeScreenshot();
+      if (photoFile == null) return;
+      final XFile photo = XFile(photoFile.path);
 
-      final XFile photo = await _cameraController!.takePicture();
-
-      // Turn flash off after capture
-      if (_flashMode == FlashMode.always) {
-        await _cameraController!.setFlashMode(FlashMode.off);
-      }
-      
       // Navigate to photo editor
       if (mounted) {
         Navigator.push(
@@ -174,15 +130,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   }
 
   Future<void> _startVideoRecording() async {
-    if (_cameraController == null || 
-        !_cameraController!.value.isInitialized ||
-        _isRecording ||
-        _cameraController!.value.isRecordingVideo) {
+    if (_isRecording) {
       return;
     }
 
     try {
-      await _cameraController!.startVideoRecording();
+      await _deepArController.startVideoRecording();
       if (mounted) {
         setState(() {
           _isRecording = true;
@@ -205,20 +158,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   }
 
   Future<void> _stopVideoRecording() async {
-    if (_cameraController == null || 
-        !_isRecording || 
-        !_cameraController!.value.isRecordingVideo) {
-      if (mounted) {
-        setState(() => _isRecording = false);
-      }
+    if (!_isRecording) {
       return;
     }
 
     try {
-      final XFile video = await _cameraController!.stopVideoRecording();
+      final File? videoFile = await _deepArController.stopVideoRecording();
+      if (videoFile == null) return;
+      final XFile video = XFile(videoFile.path);
       if (mounted) {
         setState(() => _isRecording = false);
-        
+
         // Navigate to video editor
         Navigator.push(
           context,
@@ -274,6 +224,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
     } else {
       _startVideoRecording();
     }
+  }
+
+  void _toggleFlash() {
+    setState(() {
+      _isFlashOn = !_isFlashOn;
+    });
+    _deepArController.toggleFlash();
+  }
+
+  Icon _getFlashIcon() {
+    return Icon(
+      _isFlashOn ? Icons.flash_on : Icons.flash_off,
+      color: Colors.white,
+      size: 28,
+    );
   }
 
   @override
@@ -354,67 +319,30 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   }
 
   Widget _buildTopControls() {
-    return Container(
-      padding: const EdgeInsets.all(16),
+    return Positioned(
+      top: 16,
+      left: 16,
+      right: 16,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Close Button
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.5),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.close,
-                color: Colors.black,
-                size: 24,
-              ),
-            ),
+          IconButton(
+            onPressed: _toggleFlash,
+            icon: _getFlashIcon(),
           ),
-          
-          // Mode Selector
-          Row(
-            children: [
-              _buildModeButton('photo', 'Photo'),
-              const SizedBox(width: 16),
-              _buildModeButton('video', 'Video'),
-            ],
-          ),
-          
-          // Flash Button
-          GestureDetector(
-            onTap: _toggleFlash,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.5),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                _getFlashIcon(),
-                color: _flashMode == FlashMode.off ? Colors.black : Colors.amber,
-                size: 24,
-              ),
+          IconButton(
+            onPressed: () {
+              // Open settings or something
+            },
+            icon: const Icon(
+              Icons.settings,
+              color: Colors.white,
+              size: 28,
             ),
           ),
         ],
       ),
     );
-  }
-
-  IconData _getFlashIcon() {
-    switch (_flashMode) {
-      case FlashMode.off:
-        return Icons.flash_off;
-      case FlashMode.always:
-        return Icons.flash_on;
-      default:
-        return Icons.flash_off;
-    }
   }
 
   Widget _buildModeButton(String mode, String label) {
@@ -464,13 +392,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
           children: [
             // Camera Preview - Fill available space while maintaining aspect ratio
             Positioned.fill(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _cameraController!.value.previewSize!.height,
-                  height: _cameraController!.value.previewSize!.width,
-                  child: CameraPreview(_cameraController!),
-                ),
+              child: Transform.scale(
+                scale: _deepArController.aspectRatio,
+                child: DeepArPreviewPlus(_deepArController),
               ),
             ),
             
@@ -487,7 +411,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
               top: 16,
               right: 16,
               child: GestureDetector(
-                onTap: _switchCamera,
+                onTap: () => _deepArController.flipCamera(),
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -545,82 +469,133 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   }
 
   Widget _buildBottomControls() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          // Gallery Button
-          GestureDetector(
-            onTap: _openGallery,
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.photo_library_outlined,
-                color: Colors.black,
-                size: 28,
-              ),
-            ),
-          ),
-          
-          // Capture Button
-          GestureDetector(
-            onTap: () {
-              if (_captureMode == 'photo') {
-                _capturePhoto();
-              } else {
-                _handleVideoCapture();
-              }
+    return Column(
+      children: [
+        // Filter Selector
+        Container(
+          height: 80,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _effects.length,
+            itemBuilder: (context, index) {
+              return GestureDetector(
+                onTap: () {
+                  _currentEffect = _effects[index];
+                  _deepArController.switchEffect(_currentEffect);
+                  setState(() {});
+                },
+                child: Container(
+                  margin: const EdgeInsets.all(8),
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: _currentEffect == _effects[index]
+                          ? Colors.blue
+                          : Colors.grey,
+                      width: 2,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      _effects[index]
+                          .split('/')
+                          .last
+                          .replaceAll('.deepar', ''),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: _currentEffect == _effects[index]
+                            ? Colors.blue
+                            : Colors.grey,
+                      ),
+                    ),
+                  ),
+                ),
+              );
             },
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: _isRecording ? Colors.red : Colors.white,
-                  width: 4,
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              // Gallery Button
+              GestureDetector(
+                onTap: _openGallery,
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.photo_library_outlined,
+                    color: Colors.black,
+                    size: 28,
+                  ),
                 ),
               ),
-              child: Center(
-                child: Icon(
-                  _captureMode == 'photo' 
-                      ? Icons.camera_alt_outlined 
-                      : _isRecording 
-                          ? Icons.stop_outlined 
-                          : Icons.videocam_outlined,
-                  color: Colors.white,
-                  size: 32,
+
+              // Capture Button
+              GestureDetector(
+                onTap: () {
+                  if (_captureMode == 'photo') {
+                    _capturePhoto();
+                  } else {
+                    _handleVideoCapture();
+                  }
+                },
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: AppTheme.getPrimaryColor(
+                        ref.watch(authServiceProvider).userModel),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: _isRecording ? Colors.red : Colors.white,
+                      width: 4,
+                    ),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      _captureMode == 'photo'
+                          ? Icons.camera_alt_outlined
+                          : _isRecording
+                              ? Icons.stop_outlined
+                              : Icons.videocam_outlined,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          
-          // Settings Button
-          GestureDetector(
-            onTap: _showCameraSettings,
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(12),
+
+              // Settings Button
+              GestureDetector(
+                onTap: _showCameraSettings,
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.settings_outlined,
+                    color: Colors.black,
+                    size: 28,
+                  ),
+                ),
               ),
-              child: const Icon(
-                Icons.settings_outlined,
-                color: Colors.black,
-                size: 28,
-              ),
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

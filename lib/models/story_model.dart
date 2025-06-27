@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:snapagram/models/enums.dart';
 
 enum StoryType { image, video }
 enum StoryVisibility { public, friends }
@@ -7,6 +8,7 @@ class StoryModel {
   final String id;
   final String uid; // creator's uid
   final String creatorUsername;
+  final UserRole creatorRole;
   final String? creatorProfilePicture;
   final StoryType type;
   final StoryVisibility visibility;
@@ -37,6 +39,7 @@ class StoryModel {
     required this.id,
     required this.uid,
     required this.creatorUsername,
+    required this.creatorRole,
     this.creatorProfilePicture,
     required this.type,
     required this.visibility,
@@ -70,6 +73,7 @@ class StoryModel {
       'id': id,
       'uid': uid,
       'creatorUsername': creatorUsername,
+      'creatorRole': creatorRole.name,
       'creatorProfilePicture': creatorProfilePicture,
       'type': type.name,
       'visibility': visibility.name,
@@ -104,6 +108,10 @@ class StoryModel {
       id: map['id'] ?? '',
       uid: map['uid'] ?? '',
       creatorUsername: map['creatorUsername'] ?? '',
+      creatorRole: UserRole.values.firstWhere(
+        (e) => e.name == map['creatorRole'],
+        orElse: () => UserRole.owner,
+      ),
       creatorProfilePicture: map['creatorProfilePicture'],
       type: StoryType.values.firstWhere(
         (e) => e.name == map['type'],
@@ -146,6 +154,7 @@ class StoryModel {
   // Copy with changes
   StoryModel copyWith({
     String? creatorUsername,
+    UserRole? creatorRole,
     String? creatorProfilePicture,
     String? mediaUrl,
     String? thumbnailUrl,
@@ -172,6 +181,7 @@ class StoryModel {
       id: id,
       uid: uid,
       creatorUsername: creatorUsername ?? this.creatorUsername,
+      creatorRole: creatorRole ?? this.creatorRole,
       creatorProfilePicture: creatorProfilePicture ?? this.creatorProfilePicture,
       type: type,
       visibility: visibility,
@@ -246,4 +256,5 @@ class StoryModel {
 
   @override
   int get hashCode => id.hashCode;
-} 
+}
+ 

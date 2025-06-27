@@ -1,5 +1,5 @@
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mockito/mockito.dart';
 import 'package:snapagram/services/auth_service.dart';
@@ -10,10 +10,12 @@ void main() {
   group('AuthService Tests', () {
     late AuthService authService;
     late MockRef mockRef;
+    late MockFirebaseAuth mockFirebaseAuth;
 
     setUp(() {
       mockRef = MockRef();
-      authService = AuthService(mockRef);
+      mockFirebaseAuth = MockFirebaseAuth();
+      authService = AuthService(mockRef, auth: mockFirebaseAuth);
     });
 
     test('should initialize auth service', () {
@@ -21,7 +23,7 @@ void main() {
     });
 
     test('should have Firebase Auth instance', () {
-      expect(FirebaseAuth.instance, isNotNull);
+      expect(authService.auth, isNotNull);
     });
 
     test('should have user getter', () {
