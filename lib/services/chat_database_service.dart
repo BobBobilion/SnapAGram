@@ -112,19 +112,28 @@ class ChatDatabaseService {
   // Get direct chat between two users
   static Future<ChatModel?> getDirectChat(String userId1, String userId2) async {
     try {
+      print('🔍 [DEBUG] Looking for direct chat between $userId1 and $userId2');
+      
       final snapshot = await _chatsCollection
           .where('type', isEqualTo: 'direct')
           .where('participants', arrayContains: userId1)
           .get();
 
+      print('📊 [DEBUG] Found ${snapshot.docs.length} direct chats for user $userId1');
+
       for (final doc in snapshot.docs) {
         final chat = ChatModel.fromSnapshot(doc);
+        print('🔍 [DEBUG] Checking chat ${chat.id} with participants: ${chat.participants}');
         if (chat.participants.contains(userId2)) {
+          print('✅ [DEBUG] Found matching direct chat: ${chat.id}');
           return chat;
         }
       }
+      
+      print('❌ [DEBUG] No direct chat found between users');
       return null;
     } catch (e) {
+      print('❌ [DEBUG] Error getting direct chat: $e');
       throw Exception('Failed to get direct chat: $e');
     }
   }
@@ -517,6 +526,228 @@ class ChatDatabaseService {
       await _chatsCollection.doc(chatId).update({'isActive': true});
     } catch (e) {
       throw Exception('Failed to unarchive chat: $e');
+    }
+  }
+
+  // Get messages since a specific time for AI analysis
+  static Future<List<MessageModel>> getMessagesSince({
+    required String user1Id,
+    required String user2Id,
+    required DateTime since,
+    int limit = 100,
+  }) async {
+    try {
+      print('🔍 [DEBUG] Looking for messages between $user1Id and $user2Id since $since');
+      
+      // First try to get the direct chat between the two users
+      final chat = await getDirectChat(user1Id, user2Id);
+      if (chat != null) {
+        print('✅ [DEBUG] Found direct chat: ${chat.id}');
+        return await _getMessagesFromChat(chat.id, since, limit);
+      }
+
+      print('⚠️ [DEBUG] No direct chat found, looking for any shared conversations...');
+      
+      // Fallback: Look for any chats where both users are participants
+      final user1Chats = await getUserChats(user1Id);
+      final sharedChats = <ChatModel>[];
+      
+      for (final userChat in user1Chats) {
+        if (userChat.participants.contains(user2Id)) {
+          sharedChats.add(userChat);
+          print('✅ [DEBUG] Found shared chat: ${userChat.id} (type: ${userChat.type})');
+        }
+      }
+      
+      if (sharedChats.isEmpty) {
+        print('❌ [DEBUG] No shared chats found between users');
+        return [];
+      }
+      
+      // Get messages from all shared chats and combine them
+      final allMessages = <MessageModel>[];
+      for (final sharedChat in sharedChats) {
+        final chatMessages = await _getMessagesFromChat(sharedChat.id, since, limit);
+        allMessages.addAll(chatMessages);
+      }
+      
+      // Sort by creation time and limit results
+      allMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final limitedMessages = allMessages.take(limit).toList();
+      
+      print('📝 [DEBUG] Found ${limitedMessages.length} total messages from ${sharedChats.length} shared chats');
+      if (limitedMessages.isNotEmpty) {
+        print('📝 [DEBUG] Message date range: ${limitedMessages.first.createdAt} to ${limitedMessages.last.createdAt}');
+      }
+      
+      return limitedMessages;
+    } catch (e) {
+      print('❌ [DEBUG] Error getting messages since: $e');
+      return [];
+    }
+  }
+  
+  // Helper method to get messages from a specific chat
+  static Future<List<MessageModel>> _getMessagesFromChat(String chatId, DateTime since, int limit) async {
+    try {
+      final query = _messagesCollection
+          .where('chatId', isEqualTo: chatId)
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+          .orderBy('createdAt', descending: false)
+          .limit(limit);
+
+      final snapshot = await query.get();
+      final messages = snapshot.docs
+          .map((doc) => MessageModel.fromSnapshot(doc))
+          .where((message) => !message.isDeleted)
+          .toList();
+      
+      print('📝 [DEBUG] Chat $chatId: ${messages.length} messages since $since');
+      return messages;
+    } catch (e) {
+      print('❌ [DEBUG] Error getting messages from chat $chatId: $e');
+      return [];
+    }
+  }
+
+  // Get messages by type since a specific time (useful for images)
+  static Future<List<MessageModel>> getMessagesByTypeSince({
+    required String user1Id,
+    required String user2Id,
+    required MessageType messageType,
+    required DateTime since,
+    int limit = 50,
+  }) async {
+    try {
+      // Get the direct chat between the two users
+      final chat = await getDirectChat(user1Id, user2Id);
+      if (chat == null) return [];
+
+      // Query messages of specific type from the chat since the specified time
+      final query = _messagesCollection
+          .where('chatId', isEqualTo: chat.id)
+          .where('type', isEqualTo: messageType.name)
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+          .orderBy('createdAt', descending: false)
+          .limit(limit);
+
+      final snapshot = await query.get();
+      return snapshot.docs
+          .map((doc) => MessageModel.fromSnapshot(doc))
+          .where((message) => !message.isDeleted) // Exclude deleted messages
+          .toList();
+    } catch (e) {
+      print('Error getting messages by type since: $e');
+      return [];
+    }
+  }
+
+  // Get conversation statistics for AI analysis
+  static Future<Map<String, dynamic>> getConversationStats({
+    required String user1Id,
+    required String user2Id,
+    required DateTime since,
+  }) async {
+    try {
+      final messages = await getMessagesSince(
+        user1Id: user1Id,
+        user2Id: user2Id,
+        since: since,
+      );
+
+      final user1Messages = messages.where((m) => m.senderId == user1Id).toList();
+      final user2Messages = messages.where((m) => m.senderId == user2Id).toList();
+
+      // Calculate response times
+      final responseTimes = <Duration>[];
+      for (int i = 0; i < messages.length - 1; i++) {
+        final current = messages[i];
+        final next = messages[i + 1];
+        if (current.senderId != next.senderId) {
+          responseTimes.add(next.createdAt.difference(current.createdAt));
+        }
+      }
+
+      final avgResponseTime = responseTimes.isNotEmpty
+          ? responseTimes.map((d) => d.inMinutes).reduce((a, b) => a + b) / responseTimes.length
+          : 0.0;
+
+      return {
+        'totalMessages': messages.length,
+        'user1MessageCount': user1Messages.length,
+        'user2MessageCount': user2Messages.length,
+        'averageResponseTimeMinutes': avgResponseTime,
+        'imageCount': messages.where((m) => m.type == MessageType.image).length,
+        'videoCount': messages.where((m) => m.type == MessageType.video).length,
+        'lastMessageTime': messages.isNotEmpty ? messages.last.createdAt : null,
+        'conversationSpan': messages.isNotEmpty 
+            ? messages.last.createdAt.difference(messages.first.createdAt)
+            : Duration.zero,
+      };
+    } catch (e) {
+      print('Error getting conversation stats: $e');
+      return {};
+    }
+  }
+
+  // Diagnostic method to help debug conversation analysis issues
+  static Future<Map<String, dynamic>> diagnoseConversationAccess({
+    required String user1Id,
+    required String user2Id,
+  }) async {
+    try {
+      print('🔧 [DIAGNOSIS] Starting conversation access diagnosis...');
+      print('🔧 [DIAGNOSIS] User 1: $user1Id');
+      print('🔧 [DIAGNOSIS] User 2: $user2Id');
+      
+      // Check for direct chat
+      final directChat = await getDirectChat(user1Id, user2Id);
+      print('🔧 [DIAGNOSIS] Direct chat found: ${directChat != null}');
+      
+      // Get all chats for user 1
+      final user1Chats = await getUserChats(user1Id);
+      print('🔧 [DIAGNOSIS] User 1 total chats: ${user1Chats.length}');
+      
+      // Find shared chats
+      final sharedChats = user1Chats.where((chat) => chat.participants.contains(user2Id)).toList();
+      print('🔧 [DIAGNOSIS] Shared chats found: ${sharedChats.length}');
+      
+      // Get recent messages from all time periods
+      final timeChecks = [
+        {'label': '24 hours', 'duration': const Duration(hours: 24)},
+        {'label': '7 days', 'duration': const Duration(days: 7)},
+        {'label': '30 days', 'duration': const Duration(days: 30)},
+        {'label': 'All time', 'duration': const Duration(days: 365)},
+      ];
+      
+      final messagesSummary = <String, int>{};
+      
+      for (final timeCheck in timeChecks) {
+        final since = DateTime.now().subtract(timeCheck['duration'] as Duration);
+        final messages = await getMessagesSince(
+          user1Id: user1Id,
+          user2Id: user2Id,
+          since: since,
+        );
+        messagesSummary[timeCheck['label'] as String] = messages.length;
+        print('🔧 [DIAGNOSIS] Messages in ${timeCheck['label']}: ${messages.length}');
+      }
+      
+      return {
+        'hasDirectChat': directChat != null,
+        'directChatId': directChat?.id,
+        'user1TotalChats': user1Chats.length,
+        'sharedChatsCount': sharedChats.length,
+        'sharedChatIds': sharedChats.map((c) => c.id).toList(),
+        'messagesSummary': messagesSummary,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      print('🔧 [DIAGNOSIS] Error during diagnosis: $e');
+      return {
+        'error': e.toString(),
+        'timestamp': DateTime.now().toIso8601String(),
+      };
     }
   }
 } 

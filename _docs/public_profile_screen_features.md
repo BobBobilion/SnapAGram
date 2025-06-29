@@ -83,14 +83,15 @@ The `PublicProfileScreen` is a comprehensive user profile display that shows det
 - **Visual Feedback**: Different button states for each connection status
 - **Database Integration**: Uses `UserDatabaseService.sendConnectionRequest()`
 
-### 8. Reviews Section *(Friends Only)*
-*Only displayed if current user is connected as a friend with the profile owner*
+### 8. Reviews Section
+*Reviews are visible to all users, but only friends can write reviews*
 
 #### Reviews Summary Card
 - **Header**: Review icon with "Reviews" title and compact rating display
 - **Rating Display**: Large rating number with star display and review count
 - **Rating Breakdown**: Visual breakdown showing distribution of 1-5 star ratings
 - **Interactive**: Tappable to expand or view more details
+- **Write Review Button**: Appears for friends only (next to rating display)
 
 #### Reviews List
 - **Container**: Scrollable list container with max height of 400px
@@ -100,10 +101,12 @@ The `PublicProfileScreen` is a comprehensive user profile display that shows det
   - Star rating display
   - Review comment text
   - AI generation indicator (if applicable)
-- **Empty State**: When no reviews exist, shows encouraging message to write first review
+- **Empty State**: When no reviews exist, shows encouraging message
+  - For friends: "Be the first to leave a review!"
+  - For non-friends: "Reviews from connections will appear here"
 
-#### Review Submission
-- **Write Review Button**: Appears in empty state for eligible users
+#### Review Submission *(Friends Only)*
+- **Write Review Button**: Appears in both empty state and summary card for eligible users
 - **Review Dialog**: Opens `ReviewSubmissionDialog` for submitting new reviews
 - **Eligibility Check**: Uses `ReviewService.canUserReview()` to verify:
   - Users are connected as friends

@@ -10,12 +10,14 @@ class ReviewsListWidget extends ConsumerWidget {
   final String userId;
   final bool showUserInfo;
   final ScrollPhysics? physics;
+  final String? currentUserId;
 
   const ReviewsListWidget({
     super.key,
     required this.userId,
     this.showUserInfo = true,
     this.physics,
+    this.currentUserId,
   });
 
   @override
@@ -48,6 +50,7 @@ class ReviewsListWidget extends ConsumerWidget {
             return ReviewCard(
               review: reviews[index],
               showUserInfo: showUserInfo,
+              currentUserId: currentUserId,
             );
           },
         );
@@ -137,20 +140,22 @@ class ReviewsListWidget extends ConsumerWidget {
   }
 }
 
-class ReviewCard extends StatelessWidget {
+class ReviewCard extends ConsumerWidget {
   final Review review;
   final bool showUserInfo;
   final VoidCallback? onTap;
+  final String? currentUserId;
 
   const ReviewCard({
     super.key,
     required this.review,
     this.showUserInfo = true,
     this.onTap,
+    this.currentUserId,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -164,7 +169,7 @@ class ReviewCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(),
+              _buildHeader(ref),
               const SizedBox(height: 12),
               _buildRating(),
               if (review.comment.isNotEmpty) ...[
@@ -180,7 +185,7 @@ class ReviewCard extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(WidgetRef ref) {
     if (!showUserInfo) {
       return const SizedBox.shrink();
     }
@@ -249,6 +254,22 @@ class ReviewCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+        // Delete button for review owner
+        if (currentUserId != null && currentUserId == review.reviewerId) ...[
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: () => _showDeleteConfirmation(ref),
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: Colors.red[600],
+              ),
             ),
           ),
         ],
@@ -330,6 +351,82 @@ class ReviewCard extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  void _showDeleteConfirmation(WidgetRef ref) {
+    showDialog(
+      context: ref.context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Delete Review?',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to delete this review? This action cannot be undone.',
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(
+                color: Colors.grey[600],
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _deleteReview(ref);
+            },
+            child: Text(
+              'Delete',
+              style: GoogleFonts.poppins(
+                color: Colors.red[600],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteReview(WidgetRef ref) async {
+    try {
+      final reviewService = ref.read(reviewServiceProvider);
+      await reviewService.deleteReview(review.targetUserId, review.id);
+      
+      // Force refresh of the reviews stream by invalidating the provider
+      ref.invalidate(reviewServiceProvider);
+      
+      if (ref.context.mounted) {
+        ScaffoldMessenger.of(ref.context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Review deleted successfully',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (ref.context.mounted) {
+        ScaffoldMessenger.of(ref.context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to delete review: $e',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   String _formatTimeAgo(DateTime dateTime) {

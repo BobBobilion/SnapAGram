@@ -47,12 +47,27 @@ class Review {
       reviewerName: map['reviewerName'] ?? '',
       reviewerProfilePictureUrl: map['reviewerProfilePictureUrl'] ?? '',
       targetUserId: map['targetUserId'] ?? '',
-      rating: (map['rating'] ?? 0.0).toDouble(),
+      rating: _parseDoubleValue(map['rating']) ?? 0.0,
       comment: map['comment'] ?? '',
       createdAt: (map['createdAt'] as Timestamp).toDate(),
       wasAiGenerated: map['wasAiGenerated'] ?? false,
       aiSuggestion: map['aiSuggestion'],
     );
+  }
+
+  // Helper method to safely parse double values from Firestore
+  static double? _parseDoubleValue(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
   }
 
   factory Review.fromSnapshot(DocumentSnapshot snapshot) {
@@ -75,10 +90,16 @@ class ReviewSummary {
   });
 
   Map<String, dynamic> toMap() {
+    // Convert rating breakdown keys to strings for Firestore compatibility
+    final ratingBreakdownForStorage = <String, dynamic>{};
+    ratingBreakdown.forEach((key, value) {
+      ratingBreakdownForStorage[key.toString()] = value;
+    });
+
     return {
       'averageRating': averageRating,
       'totalReviews': totalReviews,
-      'ratingBreakdown': ratingBreakdown,
+      'ratingBreakdown': ratingBreakdownForStorage,
       'lastUpdated': Timestamp.fromDate(lastUpdated),
     };
   }
@@ -88,13 +109,33 @@ class ReviewSummary {
     if (map['ratingBreakdown'] != null) {
       final breakdown = map['ratingBreakdown'] as Map<String, dynamic>;
       breakdown.forEach((key, value) {
-        ratingBreakdown[int.parse(key)] = value as int;
+        try {
+          // Parse key to int (handles string keys from Firestore)
+          final intKey = int.parse(key.toString());
+          
+          // Convert value to int (handles various number types)
+          int intValue;
+          if (value is int) {
+            intValue = value;
+          } else if (value is double) {
+            intValue = value.round();
+          } else if (value is String) {
+            intValue = int.parse(value);
+          } else {
+            intValue = 0; // fallback
+          }
+          
+          ratingBreakdown[intKey] = intValue;
+        } catch (e) {
+          print('Error parsing rating breakdown entry $key: $value - $e');
+          // Skip invalid entries
+        }
       });
     }
 
     return ReviewSummary(
       averageRating: (map['averageRating'] ?? 0.0).toDouble(),
-      totalReviews: map['totalReviews'] ?? 0,
+      totalReviews: _parseIntValue(map['totalReviews']) ?? 0,
       ratingBreakdown: ratingBreakdown,
       lastUpdated: (map['lastUpdated'] as Timestamp).toDate(),
     );
@@ -103,6 +144,21 @@ class ReviewSummary {
   String get formattedRating => averageRating.toStringAsFixed(1);
   
   bool get hasReviews => totalReviews > 0;
+
+  // Helper method to safely parse integer values from Firestore
+  static int? _parseIntValue(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.round();
+    if (value is String) {
+      try {
+        return int.parse(value);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
 }
 
 class AiReviewSuggestion {

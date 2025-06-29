@@ -469,7 +469,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
             ),
           ],
         ),
-        onTap: () => _openChat(chat),
+        onTap: () async => await _openChat(chat),
         onLongPress: () => _showChatOptions(context, chat),
       ),
     );
@@ -578,7 +578,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
             ),
           ],
         ),
-        onTap: () => _openChat(chat),
+        onTap: () async => await _openChat(chat),
         onLongPress: () => _showArchivedChatOptions(context, chat),
       ),
     );
@@ -651,7 +651,19 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
     );
   }
 
-  void _openChat(ChatModel chat) {
+  Future<void> _openChat(ChatModel chat) async {
+    try {
+      // Clear notifications for this specific chat
+      final serviceManager = ref.read(appServiceManagerProvider);
+      final currentUserId = serviceManager.currentUserId;
+      if (currentUserId != null) {
+        await NotificationService.markChatAsRead(chat.id, currentUserId);
+      }
+    } catch (e) {
+      print('Error clearing chat notification: $e');
+    }
+    
+    // Navigate to chat conversation
     Navigator.push(
       context,
       MaterialPageRoute(
