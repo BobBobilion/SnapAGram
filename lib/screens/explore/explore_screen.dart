@@ -39,6 +39,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   Set<String> _doubleTapStories = {}; // Track stories that have been double-tapped
   Map<String, bool> _heartAnimations = {}; // Track heart animation states
   Map<String, dynamic> _userCache = {}; // Cache for user data and review summaries
+  Map<String, Future<Map<String, dynamic>>> _userDataFutures = {}; // Cache futures to prevent rebuild flickering
+  int _sortMode = 0; // 0 = most recent, 1 = highest rating, 2 = best fit
 
   @override
   void initState() {
@@ -73,6 +75,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     _scrollController.dispose();
     _friendsScrollController.dispose();
     _viewportCheckTimer?.cancel();
+    _userDataFutures.clear(); // Clean up cached futures
     super.dispose();
   }
 
@@ -313,32 +316,24 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.refresh, color: Colors.grey[600]),
-            onPressed: () => _refreshUserDataOnly(),
+          Icon(
+            Icons.sort,
+            color: Colors.grey[600],
+            size: 20,
           ),
-          IconButton(
-            icon: Icon(Icons.search, color: Colors.grey[600]),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Search coming soon!'),
-                  duration: Duration(milliseconds: 500),
-                ),
-              );
-            },
+          const SizedBox(width: 4),
+          TextButton(
+            onPressed: _toggleSort,
+            child: Text(
+              _sortMode == 0 ? 'Recent' : _sortMode == 1 ? 'Rating' : 'Best Fit',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
           ),
-          IconButton(
-            icon: Icon(Icons.filter_list, color: Colors.grey[600]),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Filters coming soon!'),
-                  duration: Duration(milliseconds: 500),
-                ),
-              );
-            },
-          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: TabBarView(
@@ -432,15 +427,18 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       );
     }
 
+    // Apply sorting to the stories
+    final sortedStories = _getSortedStories(stories);
+
     return ListView.builder(
       controller: scrollController,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-      itemCount: stories.length + 1,
+      itemCount: sortedStories.length + 1,
       itemBuilder: (context, index) {
-        if (index == stories.length) {
+        if (index == sortedStories.length) {
           return _buildRefreshButton(storyType, userModel);
         }
-        return _buildStoryCard(stories[index], storyType, userModel);
+        return _buildStoryCard(sortedStories[index], storyType, userModel);
       },
     );
   }
@@ -633,8 +631,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   }
 
   Widget _buildStoryHeader(StoryModel story, String timeAgo, Color cardColor, String storyType, userModel) {
+    // Get or create cached future to prevent flickering on rebuild
+    if (!_userDataFutures.containsKey(story.uid)) {
+      _userDataFutures[story.uid] = _getUserDataWithReviewSummary(story.uid);
+    }
+    
     return FutureBuilder<Map<String, dynamic>>(
-      future: _getUserDataWithReviewSummary(story.uid),
+      future: _userDataFutures[story.uid],
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           // Show loading state while fetching user data
@@ -656,12 +659,35 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                     )
                   : null,
             ),
-            title: Text(
-              story.creatorUsername,
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    story.creatorUsername,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cardColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: cardColor.withOpacity(0.3), width: 0.5),
+                  ),
+                  child: Text(
+                    story.creatorRole == UserRole.walker ? 'Walker' : 'Owner',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: cardColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
             subtitle: Row(
               children: [
@@ -744,12 +770,35 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                     )
                   : null,
             ),
-            title: Text(
-              story.creatorUsername,
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    story.creatorUsername,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cardColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: cardColor.withOpacity(0.3), width: 0.5),
+                  ),
+                  child: Text(
+                    story.creatorRole == UserRole.walker ? 'Walker' : 'Owner',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: cardColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -839,12 +888,35 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                   )
                 : null,
           ),
-          title: Text(
-            displayName,
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-            ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  displayName,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: cardColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: cardColor.withOpacity(0.3), width: 0.5),
+                ),
+                child: Text(
+                  story.creatorRole == UserRole.walker ? 'Walker' : 'Owner',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: cardColor,
+                  ),
+                ),
+              ),
+            ],
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1179,8 +1251,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           duration: Duration(milliseconds: 1000),
         ),
       );
-      _loadPublicStories();
-      _loadFriendsStories();
+      // Don't reload stories or clear cache for view operations - just update the local state
+      // This prevents flickering of user data
     } catch (e) {
       setState(() {
         if (publicStoryIndex != -1) {
@@ -1237,8 +1309,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
 
     try {
       await ref.read(appServiceManagerProvider).likeStory(story.id);
-      _loadPublicStories();
-      _loadFriendsStories();
+      // Don't reload stories or clear cache for like operations - just update the local state
+      // This prevents flickering of user data during heart animations
     } catch (e) {
       setState(() {
         if (publicStoryIndex != -1) {
@@ -1486,6 +1558,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       final userId = key.split('_with_review')[0];
       return !currentUserIds.contains(userId);
     });
+    
+    // Clean up cached futures for users that are no longer in the stories
+    _userDataFutures.removeWhere((userId, future) => !currentUserIds.contains(userId));
   }
 
   void _handleDoubleTapLike(StoryModel story) {
@@ -1529,6 +1604,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   void _clearUserCache() {
     print('Clearing user cache');
     _userCache.clear();
+    _userDataFutures.clear(); // Also clear cached futures
   }
 
   void _forceRefreshUserData() {
@@ -1557,6 +1633,289 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         ),
       );
     }
+  }
+
+  void _toggleSort() {
+    setState(() {
+      _sortMode = (_sortMode + 1) % 3; // Cycle through 0, 1, 2
+    });
+  }
+
+  List<StoryModel> _getSortedStories(List<StoryModel> stories) {
+    if (_sortMode == 1) {
+      // Sort by highest rating
+      return _sortStoriesByRating(stories);
+    } else if (_sortMode == 2) {
+      // Sort by best fit
+      return _sortStoriesByBestFit(stories);
+    } else {
+      // Sort by most recent (default)
+      final sortedStories = List<StoryModel>.from(stories);
+      sortedStories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return sortedStories;
+    }
+  }
+
+  List<StoryModel> _sortStoriesByRating(List<StoryModel> stories) {
+    final sortedStories = List<StoryModel>.from(stories);
+    
+    // Sort stories by user rating, with stories without ratings at the end
+    sortedStories.sort((a, b) {
+      final aRating = _getUserRating(a.uid);
+      final bRating = _getUserRating(b.uid);
+      
+      // Stories with ratings come first, sorted by rating descending
+      if (aRating != null && bRating != null) {
+        return bRating.compareTo(aRating);
+      } else if (aRating != null) {
+        return -1; // a has rating, b doesn't - a comes first
+      } else if (bRating != null) {
+        return 1; // b has rating, a doesn't - b comes first
+      } else {
+        // Both have no rating, sort by most recent
+        return b.createdAt.compareTo(a.createdAt);
+      }
+    });
+    
+    return sortedStories;
+  }
+
+  double? _getUserRating(String userId) {
+    final cacheKey = '${userId}_with_review';
+    if (_userCache.containsKey(cacheKey)) {
+      final data = _userCache[cacheKey] as Map<String, dynamic>;
+      final reviewSummary = data['reviewSummary'] as ReviewSummary?;
+      return reviewSummary?.averageRating;
+    }
+    return null;
+  }
+
+  List<StoryModel> _sortStoriesByBestFit(List<StoryModel> stories) {
+    final currentUser = ref.read(authServiceProvider).userModel;
+    if (currentUser == null) {
+      // Fallback to recent sort if no current user
+      final sortedStories = List<StoryModel>.from(stories);
+      sortedStories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return sortedStories;
+    }
+
+    final sortedStories = List<StoryModel>.from(stories);
+    
+    // Sort stories by best fit score
+    sortedStories.sort((a, b) {
+      final aFitScore = _calculateFitScore(currentUser, a);
+      final bFitScore = _calculateFitScore(currentUser, b);
+      
+      // Higher fit score comes first
+      final scoreComparison = bFitScore.compareTo(aFitScore);
+      if (scoreComparison != 0) {
+        return scoreComparison;
+      }
+      
+      // If fit scores are equal, sort by most recent
+      return b.createdAt.compareTo(a.createdAt);
+    });
+    
+    return sortedStories;
+  }
+
+  double _calculateFitScore(UserModel currentUser, StoryModel story) {
+    final cacheKey = '${story.uid}_with_review';
+    UserModel? storyUser;
+    
+    if (_userCache.containsKey(cacheKey)) {
+      final data = _userCache[cacheKey] as Map<String, dynamic>;
+      storyUser = data['user'] as UserModel?;
+    }
+    
+    if (storyUser == null) {
+      return 0.0; // No user data available
+    }
+
+    double fitScore = 0.0;
+    
+    // Base score: Prioritize opposite roles
+    if (currentUser.role != storyUser.role) {
+      fitScore += 100.0; // High base score for opposite roles
+      
+      // Match walker capabilities with owner needs
+      if (currentUser.role == UserRole.owner && storyUser.role == UserRole.walker) {
+        fitScore += _matchOwnerWithWalker(currentUser, storyUser);
+      } else if (currentUser.role == UserRole.walker && storyUser.role == UserRole.owner) {
+        fitScore += _matchWalkerWithOwner(currentUser, storyUser);
+      }
+    } else {
+      fitScore += 20.0; // Lower base score for same roles
+      
+      // For same roles, match similar characteristics
+      if (currentUser.role == UserRole.walker && storyUser.role == UserRole.walker) {
+        fitScore += _matchWalkerWithWalker(currentUser, storyUser);
+      } else if (currentUser.role == UserRole.owner && storyUser.role == UserRole.owner) {
+        fitScore += _matchOwnerWithOwner(currentUser, storyUser);
+      }
+    }
+    
+    // Add rating bonus if available
+    final rating = _getUserRating(story.uid);
+    if (rating != null) {
+      fitScore += rating * 5.0; // Add up to 25 points for 5-star rating
+    }
+    
+    return fitScore;
+  }
+
+  double _matchOwnerWithWalker(UserModel owner, UserModel walker) {
+    double matchScore = 0.0;
+    
+    if (owner.ownerProfile != null && walker.walkerProfile != null) {
+      final ownerProfile = owner.ownerProfile!;
+      final walkerProfile = walker.walkerProfile!;
+      
+              // Match dog size with walker preferences
+        if (walkerProfile.dogSizePreferences.contains(ownerProfile.dogSize)) {
+          matchScore += 30.0; // Perfect match
+        } else {
+          // Partial match for similar sizes
+          matchScore += _getDogSizeCompatibilityScore(ownerProfile.dogSize, walkerProfile.dogSizePreferences);
+        }
+      
+      // Match location/area (simplified - could be enhanced with actual distance calculation)
+      if (ownerProfile.city.isNotEmpty && walkerProfile.city.isNotEmpty) {
+        // Basic city matching - you could enhance this with actual location matching
+        if (ownerProfile.city.toLowerCase() == walkerProfile.city.toLowerCase()) {
+          matchScore += 20.0; // Same city
+        } else {
+          matchScore += 5.0; // Different cities but at least both have locations
+        }
+      }
+    }
+    
+    return matchScore;
+  }
+
+  double _matchWalkerWithOwner(UserModel walker, UserModel owner) {
+    // Same logic as above but from walker's perspective
+    return _matchOwnerWithWalker(owner, walker);
+  }
+
+  double _matchWalkerWithWalker(UserModel walker1, UserModel walker2) {
+    double matchScore = 0.0;
+    
+    if (walker1.walkerProfile != null && walker2.walkerProfile != null) {
+      final profile1 = walker1.walkerProfile!;
+      final profile2 = walker2.walkerProfile!;
+      
+      // Match similar dog size preferences
+      final commonSizes = profile1.dogSizePreferences.where(
+        (size) => profile2.dogSizePreferences.contains(size)
+      ).length;
+      matchScore += commonSizes * 15.0;
+      
+      // Match similar cities
+      if (profile1.city.isNotEmpty && profile2.city.isNotEmpty) {
+        if (profile1.city.toLowerCase() == profile2.city.toLowerCase()) {
+          matchScore += 15.0; // Same city
+        } else {
+          matchScore += 3.0; // Different cities but both have locations
+        }
+      }
+    }
+    
+    return matchScore;
+  }
+
+  double _matchOwnerWithOwner(UserModel owner1, UserModel owner2) {
+    double matchScore = 0.0;
+    
+    if (owner1.ownerProfile != null && owner2.ownerProfile != null) {
+      final profile1 = owner1.ownerProfile!;
+      final profile2 = owner2.ownerProfile!;
+      
+      // Match similar dog sizes
+      if (profile1.dogSize == profile2.dogSize) {
+        matchScore += 20.0; // Same dog size
+      } else {
+        // Partial match for similar sizes
+        matchScore += _getDogSizeCompatibilityScore(
+          profile1.dogSize.name, 
+          {profile2.dogSize.name}
+        );
+      }
+      
+      // Match similar cities
+      if (profile1.city.isNotEmpty && profile2.city.isNotEmpty) {
+        if (profile1.city.toLowerCase() == profile2.city.toLowerCase()) {
+          matchScore += 15.0; // Same city
+        } else {
+          matchScore += 3.0; // Different cities but both have locations
+        }
+      }
+    }
+    
+    return matchScore;
+  }
+
+  double _getDogSizeCompatibilityScore(dynamic ownerDogSize, dynamic walkerPreferences) {
+    // Define size compatibility matrix using DogSize enum values
+    const sizeOrder = [DogSize.small, DogSize.medium, DogSize.large, DogSize.extraLarge];
+    
+    // Get owner dog size index
+    int ownerIndex = -1;
+    if (ownerDogSize is DogSize) {
+      ownerIndex = sizeOrder.indexOf(ownerDogSize);
+    } else if (ownerDogSize is String) {
+      // Handle string names
+      for (int i = 0; i < sizeOrder.length; i++) {
+        if (sizeOrder[i].name == ownerDogSize) {
+          ownerIndex = i;
+          break;
+        }
+      }
+    }
+    
+    if (ownerIndex == -1) return 0.0;
+    
+    double bestScore = 0.0;
+    
+    // Handle List<DogSize> or Set<String>
+    Iterable<DogSize> preferences = [];
+    if (walkerPreferences is List<DogSize>) {
+      preferences = walkerPreferences;
+    } else if (walkerPreferences is Set<String>) {
+      preferences = walkerPreferences.map((name) => 
+        sizeOrder.firstWhere((size) => size.name == name, orElse: () => DogSize.medium)
+      );
+    }
+    
+    for (final walkerSize in preferences) {
+      final walkerIndex = sizeOrder.indexOf(walkerSize);
+      if (walkerIndex == -1) continue;
+      
+      // Calculate compatibility: closer sizes get higher scores
+      final sizeDifference = (ownerIndex - walkerIndex).abs();
+      double score = 0.0;
+      
+      switch (sizeDifference) {
+        case 0:
+          score = 30.0; // Perfect match
+          break;
+        case 1:
+          score = 20.0; // Adjacent sizes (medium-large closer than small-large)
+          break;
+        case 2:
+          score = 10.0; // Two sizes apart
+          break;
+        case 3:
+          score = 5.0; // Maximum difference
+          break;
+      }
+      
+      if (score > bestScore) {
+        bestScore = score;
+      }
+    }
+    
+    return bestScore;
   }
 }
 

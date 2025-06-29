@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
@@ -37,6 +38,12 @@ class _VideoEditorScreenState extends ConsumerState<VideoEditorScreen> with Tick
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    // Clear any existing text overlays when starting a new video
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(textOverlayProvider.notifier).clear();
+      }
+    });
     _initializeVideo();
   }
 
@@ -44,6 +51,10 @@ class _VideoEditorScreenState extends ConsumerState<VideoEditorScreen> with Tick
   void dispose() {
     _videoController?.dispose();
     _tabController?.dispose();
+    // Clear text overlays when leaving the screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(textOverlayProvider.notifier).clear();
+    });
     super.dispose();
   }
 
@@ -281,113 +292,121 @@ class _VideoEditorScreenState extends ConsumerState<VideoEditorScreen> with Tick
     final authService = ref.watch(authServiceProvider);
     final userModel = authService.userModel;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      resizeToAvoidBottomInset: false, // Prevent video resizing when keyboard opens
-      appBar: AppBar(
+    return WillPopScope(
+      onWillPop: () async {
+        // Clear text overlays when user presses back button
+        // Use a microtask to avoid build-time modification
+        Future.microtask(() {
+          ref.read(textOverlayProvider.notifier).clear();
+        });
+        return true;
+      },
+      child: Scaffold(
         backgroundColor: Colors.white,
-        foregroundColor: Colors.grey[800],
-        title: Text(
-          'Edit Video',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _saveAndProceed,
-            child: Text(
-              'Next',
-              style: GoogleFonts.poppins(
-                color: AppTheme.getPrimaryColor(userModel),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+        resizeToAvoidBottomInset: false, // Prevent video resizing when keyboard opens
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.grey[800],
+          title: Text(
+            'Edit Video',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
           ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.text_fields), text: 'Text'),
-            Tab(icon: Icon(Icons.photo_filter), text: 'Filters'),
-          ],
-          labelColor: AppTheme.getPrimaryColor(userModel),
-          unselectedLabelColor: Colors.grey[600],
-          indicatorColor: AppTheme.getPrimaryColor(userModel),
-        ),
-      ),
-      body: !_isInitialized
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height - 140, // Account for app bar + tabs
-                child: Column(
-                  children: [
-                    // Video Preview Section (Fixed Height)
-                    Container(
-                      height: 300, // Fixed height to prevent resizing
-                      width: double.infinity,
-                      margin: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Stack(
-                          children: [
-                            // Video Player
-                            Center(
-                              child: AspectRatio(
-                                aspectRatio: _videoController!.value.aspectRatio,
-                                child: VideoPlayer(_videoController!),
-                              ),
-                            ),
-                            
-                            // Text overlays
-                            ...textOverlays.map((overlay) => DraggableVideoTextOverlay(
-                              overlay: overlay, 
-                              onEdit: _editTextOverlay,
-                              videoSize: _videoController!.value.size,
-                            )).toList(),
-                            
-                            // Play/Pause Overlay (only when paused)
-                            if (!_videoController!.value.isPlaying)
-                              Positioned.fill(
-                                child: GestureDetector(
-                                  onTap: _togglePlayPause,
-                                  child: Container(
-                                    color: Colors.black26,
-                                    child: const Center(
-                                      child: Icon(
-                                        Icons.play_arrow,
-                                        color: Colors.white,
-                                        size: 64,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    
-                    // Video Controls
-                    _buildVideoControls(),
-                    
-                    // Tab Content
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _buildTextPanel(),
-                          _buildFiltersPanel(),
-                        ],
-                      ),
-                    ),
-                  ],
+          actions: [
+            TextButton(
+              onPressed: _saveAndProceed,
+              child: Text(
+                'Next',
+                style: GoogleFonts.poppins(
+                  color: AppTheme.getPrimaryColor(userModel),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
+          ],
+          bottom: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(icon: Icon(Icons.text_fields), text: 'Text'),
+              Tab(icon: Icon(Icons.photo_filter), text: 'Filters'),
+            ],
+            labelColor: AppTheme.getPrimaryColor(userModel),
+            unselectedLabelColor: Colors.grey[600],
+            indicatorColor: AppTheme.getPrimaryColor(userModel),
+          ),
+        ),
+        body: !_isInitialized
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  // Video Preview Section (Fixed Height) - Not scrollable
+                  Container(
+                    height: 300, // Fixed height to prevent resizing
+                    width: double.infinity,
+                    margin: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Stack(
+                        children: [
+                          // Video Player
+                          Center(
+                            child: AspectRatio(
+                              aspectRatio: _videoController!.value.aspectRatio,
+                              child: VideoPlayer(_videoController!),
+                            ),
+                          ),
+                          
+                          // Text overlays
+                          ...textOverlays.map((overlay) => DraggableVideoTextOverlay(
+                            overlay: overlay, 
+                            onEdit: _editTextOverlay,
+                            videoSize: _videoController!.value.size,
+                          )).toList(),
+                          
+                          // Play/Pause Overlay (only when paused) - Smaller centered button
+                          if (!_videoController!.value.isPlaying)
+                            Center(
+                              child: GestureDetector(
+                                onTap: _togglePlayPause,
+                                child: Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: BorderRadius.circular(40),
+                                  ),
+                                  child: const Icon(
+                                    Icons.play_arrow,
+                                    color: Colors.white,
+                                    size: 40,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  // Video Controls
+                  _buildVideoControls(),
+                  
+                  // Scrollable Tab Content
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildTextPanel(),
+                        _buildFiltersPanel(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -517,7 +536,7 @@ class _VideoEditorScreenState extends ConsumerState<VideoEditorScreen> with Tick
                       ),
                     ),
                     subtitle: Text(
-                      'Tap to edit, drag on video to move',
+                      'Tap to edit, drag to move, pinch to resize',
                       style: GoogleFonts.poppins(
                         color: Colors.grey[600],
                         fontSize: 12,
@@ -579,11 +598,13 @@ class DraggableVideoTextOverlay extends ConsumerStatefulWidget {
 
 class _DraggableVideoTextOverlayState extends ConsumerState<DraggableVideoTextOverlay> {
   late Offset _position;
+  double _fontSize = 24.0; // Initialize with default value
 
   @override
   void initState() {
     super.initState();
     _position = widget.overlay.position;
+    _fontSize = widget.overlay.fontSize;
   }
 
   @override
@@ -597,16 +618,30 @@ class _DraggableVideoTextOverlayState extends ConsumerState<DraggableVideoTextOv
       top: (_position.dy * containerHeight) - 20,
       child: GestureDetector(
         onTap: () => widget.onEdit(widget.overlay),
-        onPanUpdate: (details) {
+        onScaleStart: (details) {
+          // Store initial position for pan calculations
+        },
+        onScaleUpdate: (details) {
           setState(() {
-            _position = Offset(
-              (details.globalPosition.dx - 16) / containerWidth,
-              (details.globalPosition.dy - 200) / containerHeight, // Account for app bar height
-            );
+            // Handle pan movement (single finger or multi-finger drag)
+            if (details.pointerCount == 1) {
+              // Single finger - handle pan
+              _position = Offset(
+                (details.focalPoint.dx - 16) / containerWidth,
+                (details.focalPoint.dy - 200) / containerHeight, // Account for app bar height
+              );
+            } else if (details.pointerCount > 1) {
+              // Multi-finger - handle scale
+              final newFontSize = (widget.overlay.fontSize * details.scale).clamp(12.0, 72.0);
+              _fontSize = newFontSize;
+            }
           });
         },
-        onPanEnd: (_) {
-          ref.read(textOverlayProvider.notifier).update(widget.overlay.copyWith(position: _position));
+        onScaleEnd: (details) {
+          ref.read(textOverlayProvider.notifier).update(widget.overlay.copyWith(
+            position: _position,
+            fontSize: _fontSize,
+          ));
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -618,7 +653,7 @@ class _DraggableVideoTextOverlayState extends ConsumerState<DraggableVideoTextOv
             widget.overlay.text,
             style: GoogleFonts.poppins(
               color: widget.overlay.color,
-              fontSize: widget.overlay.fontSize,
+              fontSize: _fontSize,
               fontWeight: widget.overlay.fontWeight,
             ),
           ),

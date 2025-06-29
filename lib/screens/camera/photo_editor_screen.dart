@@ -51,7 +51,22 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
   @override
   void initState() {
     super.initState();
+    // Clear any existing text overlays when starting a new photo
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(textOverlayProvider.notifier).clear();
+      }
+    });
     _loadImage();
+  }
+
+  @override
+  void dispose() {
+    // Clear text overlays when leaving the screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(textOverlayProvider.notifier).clear();
+    });
+    super.dispose();
   }
 
   Future<void> _loadImage() async {
@@ -352,88 +367,98 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
   Widget build(BuildContext context) {
     final textOverlays = ref.watch(textOverlayProvider);
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
+    return WillPopScope(
+      onWillPop: () async {
+        // Clear text overlays when user presses back button
+        // Use a microtask to avoid build-time modification
+        Future.microtask(() {
+          ref.read(textOverlayProvider.notifier).clear();
+        });
+        return true;
+      },
+      child: Scaffold(
         backgroundColor: Colors.white,
-        foregroundColor: Colors.grey[800],
-        title: Text(
-          'Edit Photo',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _saveAndProceed,
-            child: Text(
-              'Next',
-              style: GoogleFonts.poppins(
-                color: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
-                fontWeight: FontWeight.w600,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.grey[800],
+          title: Text(
+            'Edit Photo',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          actions: [
+            TextButton(
+              onPressed: _isLoading ? null : _saveAndProceed,
+              child: Text(
+                'Next',
+                style: GoogleFonts.poppins(
+                  color: AppTheme.getPrimaryColor(ref.watch(authServiceProvider).userModel),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-              ),
-            )
-          : Column(
-              children: [
-                // Image Preview
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: RepaintBoundary(
-                      key: _repaintBoundaryKey,
-                      child: Stack(
-                        children: [
-                          // Image
-                          if (_editedImage != null)
-                            Center(
-                              child: Image.memory(
-                                Uint8List.fromList(img.encodePng(_editedImage!)),
-                                fit: BoxFit.contain,
+          ],
+        ),
+        body: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                ),
+              )
+            : Column(
+                children: [
+                  // Image Preview
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: RepaintBoundary(
+                        key: _repaintBoundaryKey,
+                        child: Stack(
+                          children: [
+                            // Image
+                            if (_editedImage != null)
+                              Center(
+                                child: Image.memory(
+                                  Uint8List.fromList(img.encodePng(_editedImage!)),
+                                  fit: BoxFit.contain,
+                                ),
                               ),
-                            ),
-                          // Text overlays
-                          ...textOverlays.map((overlay) => DraggableTextOverlay(overlay: overlay, onEdit: _editTextOverlay)).toList(),
-                        ],
+                            // Text overlays
+                            ...textOverlays.map((overlay) => DraggableTextOverlay(overlay: overlay, onEdit: _editTextOverlay)).toList(),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                
-                // Mode Selector
-                Container(
-                  height: 60,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildModeButton('filters', 'Filters', Icons.photo_filter),
-                      _buildModeButton('adjust', 'Adjust', Icons.tune),
-                      _buildModeButton('text', 'Text', Icons.text_fields),
-                    ],
+                  
+                  // Mode Selector
+                  Container(
+                    height: 60,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildModeButton('filters', 'Filters', Icons.photo_filter),
+                        _buildModeButton('adjust', 'Adjust', Icons.tune),
+                        _buildModeButton('text', 'Text', Icons.text_fields),
+                      ],
+                    ),
                   ),
-                ),
-                
-                // Editor Panel
-                Container(
-                  height: 200,
-                  color: Colors.grey[100],
-                  child: _buildEditorPanel(),
-                ),
-              ],
-            ),
+                  
+                  // Editor Panel
+                  Container(
+                    height: 200,
+                    color: Colors.grey[100],
+                    child: _buildEditorPanel(),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -705,7 +730,7 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
                         style: GoogleFonts.poppins(color: Colors.grey[800]),
                       ),
                       subtitle: Text(
-                        'Tap to edit, drag to move',
+                        'Tap to edit, drag to move, pinch to resize',
                         style: GoogleFonts.poppins(
                           color: Colors.grey[600],
                           fontSize: 12,
@@ -739,11 +764,13 @@ class DraggableTextOverlay extends ConsumerStatefulWidget {
 
 class _DraggableTextOverlayState extends ConsumerState<DraggableTextOverlay> {
   late Offset _position;
+  double _fontSize = 24.0; // Initialize with default value
 
   @override
   void initState() {
     super.initState();
     _position = widget.overlay.position;
+    _fontSize = widget.overlay.fontSize;
   }
 
   @override
@@ -755,16 +782,30 @@ class _DraggableTextOverlayState extends ConsumerState<DraggableTextOverlay> {
         onTap: () {
           widget.onEdit(widget.overlay);
         },
-        onPanUpdate: (details) {
+        onScaleStart: (details) {
+          // Store initial position for pan calculations
+        },
+        onScaleUpdate: (details) {
           setState(() {
-            _position = Offset(
-              (details.globalPosition.dx) / MediaQuery.of(context).size.width,
-              (details.globalPosition.dy - 200) / 300,
-            );
+            // Handle pan movement (single finger or multi-finger drag)
+            if (details.pointerCount == 1) {
+              // Single finger - handle pan
+              _position = Offset(
+                (details.focalPoint.dx) / MediaQuery.of(context).size.width,
+                (details.focalPoint.dy - 200) / 300,
+              );
+            } else if (details.pointerCount > 1) {
+              // Multi-finger - handle scale
+              final newFontSize = (widget.overlay.fontSize * details.scale).clamp(12.0, 72.0);
+              _fontSize = newFontSize;
+            }
           });
         },
-        onPanEnd: (_) {
-          ref.read(textOverlayProvider.notifier).update(widget.overlay.copyWith(position: _position));
+        onScaleEnd: (details) {
+          ref.read(textOverlayProvider.notifier).update(widget.overlay.copyWith(
+            position: _position,
+            fontSize: _fontSize,
+          ));
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -776,7 +817,7 @@ class _DraggableTextOverlayState extends ConsumerState<DraggableTextOverlay> {
             widget.overlay.text,
             style: GoogleFonts.poppins(
               color: widget.overlay.color,
-              fontSize: widget.overlay.fontSize,
+              fontSize: _fontSize,
               fontWeight: widget.overlay.fontWeight,
             ),
           ),

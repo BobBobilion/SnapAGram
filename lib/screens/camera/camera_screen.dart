@@ -22,6 +22,22 @@ import '../../utils/app_theme.dart';
 import 'photo_editor_screen.dart';
 import 'video_editor_screen.dart';
 
+class Filter {
+  final String id;
+  final String name;
+  final String assetPath;
+  final IconData icon;
+  final Color color;
+
+  const Filter({
+    required this.id,
+    required this.name,
+    required this.assetPath,
+    required this.icon,
+    required this.color,
+  });
+}
+
 class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
 
@@ -41,13 +57,99 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   bool _permissionGranted = false;
   final DeepArControllerPlus _deepArController = DeepArControllerPlus();
   String _currentEffect = 'none';
-  List<String> _effects = [
-    'none',
-    'assets/effects/viking_helmet.deepar',
-    'assets/effects/MakeupLook.deepar',
-    'assets/effects/Neon_Devil_Horns.deepar',
-    'assets/effects/flower_face.deepar',
-    'assets/effects/Stallone.deepar',
+  
+  final List<Filter> _filters = [
+    const Filter(
+      id: 'none',
+      name: 'Normal',
+      assetPath: 'assets/effects/none.deepar',
+      icon: Icons.camera_alt_outlined,
+      color: Colors.grey,
+    ),
+    const Filter(
+      id: 'viking_helmet',
+      name: 'Viking',
+      assetPath: 'assets/effects/viking_helmet.deepar',
+      icon: Icons.face_outlined,
+      color: Colors.orange,
+    ),
+    const Filter(
+      id: 'neon_horns',
+      name: 'Neon',
+      assetPath: 'assets/effects/Neon_Devil_Horns.deepar',
+      icon: Icons.auto_awesome,
+      color: Colors.purple,
+    ),
+    const Filter(
+      id: 'flower_face',
+      name: 'Flower',
+      assetPath: 'assets/effects/flower_face.deepar',
+      icon: Icons.local_florist,
+      color: Colors.green,
+    ),
+    const Filter(
+      id: 'burning_effect',
+      name: 'Fire',
+      assetPath: 'assets/effects/burning_effect.deepar',
+      icon: Icons.local_fire_department,
+      color: Colors.red,
+    ),
+    const Filter(
+      id: 'emotions_exaggerator',
+      name: 'Emotions',
+      assetPath: 'assets/effects/Emotions_Exaggerator.deepar',
+      icon: Icons.sentiment_satisfied_alt,
+      color: Colors.yellow,
+    ),
+    const Filter(
+      id: 'emotion_meter',
+      name: 'Mood',
+      assetPath: 'assets/effects/Emotion_Meter.deepar',
+      icon: Icons.psychology,
+      color: Colors.blue,
+    ),
+    const Filter(
+      id: 'fire_effect',
+      name: 'Flames',
+      assetPath: 'assets/effects/Fire_Effect.deepar',
+      icon: Icons.whatshot,
+      color: Colors.orange,
+    ),
+    const Filter(
+      id: 'galaxy_background',
+      name: 'Galaxy',
+      assetPath: 'assets/effects/galaxy_background.deepar',
+      icon: Icons.auto_awesome,
+      color: Colors.indigo,
+    ),
+    const Filter(
+      id: 'hope',
+      name: 'Hope',
+      assetPath: 'assets/effects/Hope.deepar',
+      icon: Icons.favorite,
+      color: Colors.pink,
+    ),
+    const Filter(
+      id: 'ping_pong',
+      name: 'Ping Pong',
+      assetPath: 'assets/effects/Ping_Pong.deepar',
+      icon: Icons.sports_tennis,
+      color: Colors.green,
+    ),
+    const Filter(
+      id: 'pixel_hearts',
+      name: 'Hearts',
+      assetPath: 'assets/effects/Pixel_Hearts.deepar',
+      icon: Icons.favorite_border,
+      color: Colors.red,
+    ),
+    const Filter(
+      id: 'vendetta_mask',
+      name: 'Vendetta',
+      assetPath: 'assets/effects/Vendetta_Mask.deepar',
+      icon: Icons.masks,
+      color: Colors.black,
+    ),
   ];
 
   @override
@@ -495,44 +597,62 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
       children: [
         // Filter Selector
         Container(
-          height: 80,
+          height: 100,
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: _effects.length,
+            itemCount: _filters.length,
             itemBuilder: (context, index) {
+              final filter = _filters[index];
+              final isSelected = _currentEffect == filter.id;
+              final authService = ref.watch(authServiceProvider);
+              final userModel = authService.userModel;
+              final primaryColor = AppTheme.getPrimaryColor(userModel);
+              
               return GestureDetector(
                 onTap: () {
-                  _currentEffect = _effects[index];
-                  _deepArController.switchEffect(_currentEffect);
+                  _currentEffect = filter.id;
+                  _deepArController.switchEffect(filter.assetPath);
                   setState(() {});
                 },
                 child: Container(
-                  margin: const EdgeInsets.all(8),
-                  width: 60,
-                  height: 60,
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                  width: 70,
+                  height: 70,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(12),
+                    color: isSelected ? primaryColor : Colors.grey[100],
                     border: Border.all(
-                      color: _currentEffect == _effects[index]
-                          ? Colors.blue
-                          : Colors.grey,
+                      color: isSelected ? primaryColor : Colors.grey[300]!,
                       width: 2,
                     ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      _effects[index]
-                          .split('/')
-                          .last
-                          .replaceAll('.deepar', ''),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: _currentEffect == _effects[index]
-                            ? Colors.blue
-                            : Colors.grey,
+                    boxShadow: isSelected ? [
+                      BoxShadow(
+                        color: primaryColor.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
+                    ] : null,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        filter.icon,
+                        color: isSelected ? Colors.white : filter.color,
+                        size: 24,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        filter.name,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: isSelected ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               );

@@ -55,6 +55,10 @@ class TextOverlayNotifier extends StateNotifier<List<TextOverlay>> {
   void remove(String id) {
     state = state.where((o) => o.id != id).toList();
   }
+
+  void clear() {
+    state = [];
+  }
 }
 
 final textOverlayProvider = StateNotifierProvider<TextOverlayNotifier, List<TextOverlay>>((ref) {

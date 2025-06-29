@@ -488,7 +488,7 @@ class PublicProfileScreen extends ConsumerWidget {
                   children: [
                     _buildDogStatCapsule(
                       icon: Icons.pets,
-                      value: 'size',
+                      value: ownerProfile.dogSizeText,
                       color: Colors.blue[100]!,
                       textColor: Colors.blue[700]!,
                     ),
@@ -503,7 +503,7 @@ class PublicProfileScreen extends ConsumerWidget {
                   children: [
                     _buildDogStatCapsule(
                       icon: Icons.male,
-                      value: 'gender',
+                      value: ownerProfile.dogGender ?? 'Not specified',
                       color: Colors.pink[100]!,
                       textColor: Colors.pink[700]!,
                     ),
@@ -518,7 +518,7 @@ class PublicProfileScreen extends ConsumerWidget {
                   children: [
                     _buildDogStatCapsule(
                       icon: Icons.timer,
-                      value: 'duration',
+                      value: ownerProfile.preferredDurationText,
                       color: Colors.green[100]!,
                       textColor: Colors.green[700]!,
                     ),
@@ -536,7 +536,7 @@ class PublicProfileScreen extends ConsumerWidget {
                 Icon(Icons.cake, size: 16, color: Colors.orange[600]),
                 const SizedBox(width: 6),
                 Text(
-                  'age',
+                  ownerProfile.ageText,
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     color: Colors.grey[700],
