@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:snapagram/models/enums.dart';
+import 'package:snapagram/models/user_model.dart';
+import 'package:snapagram/models/review.dart';
 import 'package:video_player/video_player.dart';
 import 'package:snapagram/screens/profile/public_profile_screen.dart';
 import '../../services/app_service_manager.dart';
@@ -13,6 +15,7 @@ import '../../utils/app_theme.dart';
 import '../../providers/ui_provider.dart';
 import 'dart:async';
 import 'package:flutter/rendering.dart';
+import '../../services/review_service.dart';
 
 class ExploreScreen extends ConsumerStatefulWidget {
   const ExploreScreen({super.key});
@@ -35,6 +38,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   Timer? _viewportCheckTimer; // Debounce timer for viewport checks
   Set<String> _doubleTapStories = {}; // Track stories that have been double-tapped
   Map<String, bool> _heartAnimations = {}; // Track heart animation states
+  Map<String, dynamic> _userCache = {}; // Cache for user data and review summaries
 
   @override
   void initState() {
@@ -158,6 +162,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           _isLoadingPublic = false;
         });
         _cleanupStoryKeys();
+        _clearUserCache(); // Clear cache to get fresh user data
         // Check viewport visibility after loading new stories
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _checkViewportVisibility();
@@ -188,6 +193,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           _isLoadingFriends = false;
         });
         _cleanupStoryKeys();
+        _clearUserCache(); // Clear cache to get fresh user data
         // Check viewport visibility after loading new stories
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _checkViewportVisibility();
@@ -214,6 +220,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         setState(() {
           _publicStories = stories;
         });
+        _clearUserCache(); // Clear cache to get fresh user data
+        _forceRefreshUserData(); // Force refresh user data for all stories
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Refreshed ${stories.length} public stories'),
@@ -243,6 +251,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         setState(() {
           _friendsStories = stories;
         });
+        _clearUserCache(); // Clear cache to get fresh user data
+        _forceRefreshUserData(); // Force refresh user data for all stories
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Refreshed ${stories.length} friends stories'),
@@ -303,6 +313,10 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           ],
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.refresh, color: Colors.grey[600]),
+            onPressed: () => _refreshUserDataOnly(),
+          ),
           IconButton(
             icon: Icon(Icons.search, color: Colors.grey[600]),
             onPressed: () {
@@ -465,62 +479,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                 ),
               );
             },
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: cardColor.withOpacity(0.1),
-                backgroundImage: story.creatorProfilePicture != null
-                    ? NetworkImage(story.creatorProfilePicture!)
-                    : null,
-                child: story.creatorProfilePicture == null
-                    ? Text(
-                        story.creatorUsername.isNotEmpty
-                            ? story.creatorUsername[0].toUpperCase()
-                            : 'U',
-                        style: TextStyle(
-                          color: cardColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
-              ),
-              title: Text(
-                story.creatorUsername,
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
-              subtitle: Text(
-                timeAgo,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-              trailing: storyType == 'friends'
-                  ? (story.visibility == StoryVisibility.friends
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppTheme.getColorShade(userModel, 100),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            'Friends Only',
-                            style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: AppTheme.getColorShade(userModel, 700),
-                            ),
-                          ),
-                        )
-                      : null)
-                  : IconButton(
-                      icon: const Icon(Icons.more_vert),
-                      onPressed: () => _showStoryOptions(context, story),
-                    ),
-            ),
+            child: _buildStoryHeader(story, timeAgo, cardColor, storyType, userModel),
           ),
           GestureDetector(
             onTap: () => _viewStory(story),
@@ -671,6 +630,368 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildStoryHeader(StoryModel story, String timeAgo, Color cardColor, String storyType, userModel) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _getUserDataWithReviewSummary(story.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          // Show loading state while fetching user data
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundColor: cardColor.withOpacity(0.1),
+              backgroundImage: story.creatorProfilePicture != null
+                  ? NetworkImage(story.creatorProfilePicture!)
+                  : null,
+              child: story.creatorProfilePicture == null
+                  ? Text(
+                      story.creatorUsername.isNotEmpty
+                          ? story.creatorUsername[0].toUpperCase()
+                          : 'U',
+                      style: TextStyle(
+                        color: cardColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+            title: Text(
+              story.creatorUsername,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            subtitle: Row(
+              children: [
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[400]!),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Loading...',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: Colors.grey[500],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    timeAgo,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            trailing: storyType == 'friends'
+                ? (story.visibility == StoryVisibility.friends
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.getColorShade(userModel, 100),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Friends Only',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.getColorShade(userModel, 700),
+                          ),
+                        ),
+                      )
+                    : null)
+                : IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    onPressed: () => _showStoryOptions(context, story),
+                  ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          print('Error loading user data for ${story.uid}: ${snapshot.error}');
+          // Show fallback with error state
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundColor: cardColor.withOpacity(0.1),
+              backgroundImage: story.creatorProfilePicture != null
+                  ? NetworkImage(story.creatorProfilePicture!)
+                  : null,
+              child: story.creatorProfilePicture == null
+                  ? Text(
+                      story.creatorUsername.isNotEmpty
+                          ? story.creatorUsername[0].toUpperCase()
+                          : 'U',
+                      style: TextStyle(
+                        color: cardColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+            title: Text(
+              story.creatorUsername,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 14,
+                      color: Colors.red[400],
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'Error loading rating',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.red[400],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  timeAgo,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+            trailing: storyType == 'friends'
+                ? (story.visibility == StoryVisibility.friends
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.getColorShade(userModel, 100),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Friends Only',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.getColorShade(userModel, 700),
+                          ),
+                        ),
+                      )
+                    : null)
+                : IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    onPressed: () => _showStoryOptions(context, story),
+                  ),
+          );
+        }
+
+        final data = snapshot.data!;
+        final user = data['user'] as UserModel?;
+        final reviewSummary = data['reviewSummary'] as ReviewSummary?;
+        
+        final displayName = user?.displayName ?? story.creatorUsername;
+        final rating = reviewSummary?.averageRating;
+        final totalReviews = reviewSummary?.totalReviews;
+        
+        // Debug logging
+        print('User data for ${story.uid}: displayName=$displayName, rating=$rating, totalReviews=$totalReviews, hasReviewSummary=${reviewSummary != null}');
+        
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: cardColor.withOpacity(0.1),
+            backgroundImage: story.creatorProfilePicture != null
+                ? NetworkImage(story.creatorProfilePicture!)
+                : null,
+            child: story.creatorProfilePicture == null
+                ? Text(
+                    displayName.isNotEmpty
+                        ? displayName[0].toUpperCase()
+                        : 'U',
+                    style: TextStyle(
+                      color: cardColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                : null,
+          ),
+          title: Text(
+            displayName,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Rating row
+              if (rating != null) ...[
+                Row(
+                  children: [
+                    Icon(
+                      Icons.star,
+                      size: 14,
+                      color: Colors.amber,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        rating.toStringAsFixed(1),
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[700],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (totalReviews != null && totalReviews > 0) ...[
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '(${totalReviews})',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.grey[600],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ] else ...[
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '(No reviews)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.grey[500],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+              ] else ...[
+                // Show when rating is null
+                Row(
+                  children: [
+                    Icon(
+                      Icons.star_border,
+                      size: 14,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'No rating',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey[500],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+              ],
+              // Time ago
+              Text(
+                timeAgo,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          trailing: storyType == 'friends'
+              ? (story.visibility == StoryVisibility.friends
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.getColorShade(userModel, 100),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Friends Only',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.getColorShade(userModel, 700),
+                        ),
+                      ),
+                    )
+                  : null)
+              : IconButton(
+                  icon: const Icon(Icons.more_vert),
+                  onPressed: () => _showStoryOptions(context, story),
+                ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> _getUserDataWithReviewSummary(String userId) async {
+    // Check cache first
+    final cacheKey = '${userId}_with_review';
+    if (_userCache.containsKey(cacheKey)) {
+      print('Using cached user data with review summary for $userId');
+      return _userCache[cacheKey] as Map<String, dynamic>;
+    }
+    
+    try {
+      print('Fetching user data and review summary for $userId');
+      
+      // Fetch user data and review summary in parallel
+      final futures = await Future.wait([
+        ref.read(appServiceManagerProvider).getUserById(userId),
+        ref.read(reviewServiceProvider).getReviewSummary(userId),
+      ]);
+      
+      final user = futures[0] as UserModel?;
+      final reviewSummary = futures[1] as ReviewSummary?;
+      
+      final result = {
+        'user': user,
+        'reviewSummary': reviewSummary,
+      };
+      
+      _userCache[cacheKey] = result;
+      print('Fetched user data for $userId: ${user?.displayName}, rating: ${reviewSummary?.averageRating}');
+      return result;
+    } catch (e) {
+      print('Error fetching user data for $userId: $e');
+      rethrow;
+    }
   }
 
   String _getTimeAgo(DateTime dateTime) {
@@ -1154,6 +1475,17 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     // Clean up animation states for stories that are no longer in the lists
     _heartAnimations.removeWhere((key, value) => !currentStoryIds.contains(key));
     _doubleTapStories.removeWhere((storyId) => !currentStoryIds.contains(storyId));
+    
+    // Clean up user cache for users that are no longer in the stories
+    final currentUserIds = <String>{};
+    currentUserIds.addAll(_publicStories.map((s) => s.uid));
+    currentUserIds.addAll(_friendsStories.map((s) => s.uid));
+    
+    _userCache.removeWhere((key, value) {
+      // Extract user ID from cache key (format: "userId_with_review")
+      final userId = key.split('_with_review')[0];
+      return !currentUserIds.contains(userId);
+    });
   }
 
   void _handleDoubleTapLike(StoryModel story) {
@@ -1192,6 +1524,39 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         });
       }
     });
+  }
+
+  void _clearUserCache() {
+    print('Clearing user cache');
+    _userCache.clear();
+  }
+
+  void _forceRefreshUserData() {
+    print('Force refreshing user data for all stories');
+    // Force rebuild by clearing cache and triggering setState
+    _clearUserCache();
+    if (mounted) {
+      setState(() {
+        // This will trigger rebuild of all story cards
+      });
+    }
+  }
+
+  Future<void> _refreshUserDataOnly() async {
+    print('Refreshing user data only');
+    _clearUserCache();
+    if (mounted) {
+      setState(() {
+        // This will trigger rebuild of all story cards with fresh user data
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Refreshed user ratings'),
+          backgroundColor: Colors.blue,
+          duration: Duration(milliseconds: 1500),
+        ),
+      );
+    }
   }
 }
 
