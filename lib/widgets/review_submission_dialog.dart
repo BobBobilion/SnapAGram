@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/review.dart';
 import '../models/user_model.dart';
 import '../services/review_service.dart';
 import '../services/ai_review_service.dart';
+import '../services/conversation_analysis_service.dart';
 import '../utils/app_theme.dart';
 import 'rating_display_widget.dart';
 
 class ReviewSubmissionDialog extends ConsumerStatefulWidget {
   final UserModel currentUser;
   final UserModel targetUser;
+  final String? chatId;
 
   const ReviewSubmissionDialog({
     super.key,
     required this.currentUser,
     required this.targetUser,
+    this.chatId,
   });
 
   @override
@@ -56,6 +60,7 @@ class _ReviewSubmissionDialogState extends ConsumerState<ReviewSubmissionDialog>
         targetUserId: widget.targetUser.uid,
         reviewer: widget.currentUser,
         targetUser: widget.targetUser,
+        chatId: widget.chatId,
       );
 
       setState(() {
@@ -389,6 +394,11 @@ class _ReviewSubmissionDialogState extends ConsumerState<ReviewSubmissionDialog>
                 overflow: TextOverflow.ellipsis,
               ),
             ],
+            // Debug section for detailed image analysis
+            if (kDebugMode) ...[
+              const SizedBox(height: 12),
+              _buildDebugImageAnalysisSection(),
+            ],
           ] else ...[
             Text(
               'Write your own review using the fields below.',
@@ -590,5 +600,168 @@ class _ReviewSubmissionDialogState extends ConsumerState<ReviewSubmissionDialog>
     if (rating <= 3) return Colors.orange[600]!;
     if (rating <= 4) return Colors.blue[600]!;
     return Colors.green[600]!;
+  }
+
+  Widget _buildDebugImageAnalysisSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.bug_report,
+                color: Colors.orange[700],
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'DEBUG: Image Analysis',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.orange[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Show detailed image analysis if available
+          if (_aiSuggestion?.detailedImageAnalyses != null && _aiSuggestion!.detailedImageAnalyses!.isNotEmpty) ...[
+            Text(
+              'Images: ${_aiSuggestion!.detailedImageAnalyses!.length}',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: Colors.orange[700],
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...(_aiSuggestion!.detailedImageAnalyses!.take(2).toList().asMap().entries.map(
+              (entry) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Img ${entry.key + 1}:',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange[700],
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          'Q:${entry.value.qualityScore.toStringAsFixed(1)} R:${entry.value.relevanceScore.toStringAsFixed(1)}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      entry.value.description,
+                      style: GoogleFonts.poppins(
+                        fontSize: 9,
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (entry.value.observations.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Obs: ${entry.value.observations}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 8,
+                          color: Colors.grey[500],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (entry.value.tags.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Wrap(
+                        spacing: 2,
+                        children: entry.value.tags.take(3).map((tag) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[100],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            tag,
+                            style: GoogleFonts.poppins(
+                              fontSize: 7,
+                              color: Colors.blue[700],
+                            ),
+                          ),
+                        )).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            )),
+            if (_aiSuggestion!.detailedImageAnalyses!.length > 2) ...[
+              Text(
+                '... and ${_aiSuggestion!.detailedImageAnalyses!.length - 2} more images',
+                style: GoogleFonts.poppins(
+                  fontSize: 9,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
+          ] else if (_aiSuggestion?.imageAnalysis != null && _aiSuggestion!.imageAnalysis.isNotEmpty) ...[
+            // Fallback to string-based image analysis
+            Text(
+              'Images: ${_aiSuggestion!.imageAnalysis.length}',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: Colors.orange[700],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Note: Full ImageAnalysis data not available',
+              style: GoogleFonts.poppins(
+                fontSize: 9,
+                fontStyle: FontStyle.italic,
+                color: Colors.grey[500],
+              ),
+            ),
+          ] else ...[
+            Text(
+              'No images analyzed',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 } 

@@ -183,25 +183,21 @@ class AppServiceManager extends ChangeNotifier {
     // If mediaUrl is a local file path, upload it to Firebase Storage first
     if (!mediaUrl.startsWith('http')) {
       try {
-        print('AppServiceManager: Uploading local image to Firebase Storage...');
         final File imageFile = File(mediaUrl);
         
         if (await imageFile.exists()) {
           finalMediaUrl = await StorageService.uploadStoryImage(imageFile, currentUserId!);
-          print('AppServiceManager: Image uploaded successfully - $finalMediaUrl');
           
           // Clean up local file after successful upload
           try {
             await imageFile.delete();
-            print('AppServiceManager: Local image file deleted');
           } catch (e) {
-            print('AppServiceManager: Warning - Could not delete local file: $e');
+            // File deletion failed, but don't fail the whole operation
           }
         } else {
           throw Exception('Local image file does not exist: $mediaUrl');
         }
       } catch (e) {
-        print('AppServiceManager: Failed to upload image - $e');
         throw Exception('Failed to upload image: $e');
       }
     }
@@ -382,6 +378,7 @@ class AppServiceManager extends ChangeNotifier {
     String? replyToMessageId,
     bool allowScreenshot = true,
     bool deleteAfterView = false,
+    String? imageAnalysis,
   }) async {
     if (currentUserId == null) throw Exception('User not authenticated');
     
@@ -395,6 +392,7 @@ class AppServiceManager extends ChangeNotifier {
       replyToMessageId: replyToMessageId,
       allowScreenshot: allowScreenshot,
       deleteAfterView: deleteAfterView,
+      imageAnalysis: imageAnalysis,
     );
   }
 

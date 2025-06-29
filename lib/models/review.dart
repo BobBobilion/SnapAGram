@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/conversation_analysis_service.dart';
 
 class Review {
   final String id;
@@ -167,6 +168,7 @@ class AiReviewSuggestion {
   final List<String> conversationHighlights;
   final List<String> imageAnalysis;
   final String analysisReasoning;
+  final List<ImageAnalysis>? detailedImageAnalyses; // Full ImageAnalysis objects for debug mode
 
   AiReviewSuggestion({
     required this.suggestedRating,
@@ -174,6 +176,7 @@ class AiReviewSuggestion {
     required this.conversationHighlights,
     required this.imageAnalysis,
     required this.analysisReasoning,
+    this.detailedImageAnalyses,
   });
 
   factory AiReviewSuggestion.fromMap(Map<String, dynamic> map) {
@@ -183,6 +186,7 @@ class AiReviewSuggestion {
       conversationHighlights: List<String>.from(map['conversationHighlights'] ?? []),
       imageAnalysis: List<String>.from(map['imageAnalysis'] ?? []),
       analysisReasoning: map['analysisReasoning'] ?? '',
+      detailedImageAnalyses: null, // Not serializable, only for runtime use
     );
   }
 } 

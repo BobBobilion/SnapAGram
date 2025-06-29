@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/review.dart';
 import '../../models/user_model.dart';
 import '../../services/review_service.dart';
 import '../../services/ai_review_service.dart';
+import '../../services/conversation_analysis_service.dart';
 import '../../utils/app_theme.dart';
 import '../../widgets/rating_display_widget.dart';
 
 class ReviewSubmissionScreen extends ConsumerStatefulWidget {
   final UserModel currentUser;
   final UserModel targetUser;
+  final String? chatId;
 
   const ReviewSubmissionScreen({
     super.key,
     required this.currentUser,
     required this.targetUser,
+    this.chatId,
   });
 
   @override
@@ -56,6 +60,7 @@ class _ReviewSubmissionScreenState extends ConsumerState<ReviewSubmissionScreen>
         targetUserId: widget.targetUser.uid,
         reviewer: widget.currentUser,
         targetUser: widget.targetUser,
+        chatId: widget.chatId,
       );
 
       setState(() {
@@ -434,6 +439,11 @@ class _ReviewSubmissionScreenState extends ConsumerState<ReviewSubmissionScreen>
                   ),
                 ),
               ],
+              // Debug section for detailed image analysis
+              if (kDebugMode) ...[
+                const SizedBox(height: 16),
+                _buildDebugImageAnalysisSection(),
+              ],
             ] else ...[
               Text(
                 'Write your own review using the fields below.',
@@ -445,6 +455,228 @@ class _ReviewSubmissionScreenState extends ConsumerState<ReviewSubmissionScreen>
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  // Debug section to show detailed image analysis
+  Widget _buildDebugImageAnalysisSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.bug_report,
+                color: Colors.orange[700],
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'DEBUG: Detailed Image Analysis',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.orange[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Show detailed image analysis if available
+          if (_aiSuggestion?.detailedImageAnalyses != null && _aiSuggestion!.detailedImageAnalyses!.isNotEmpty) ...[
+            Text(
+              'Image Analysis Count: ${_aiSuggestion!.detailedImageAnalyses!.length}',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.orange[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...(_aiSuggestion!.detailedImageAnalyses!.asMap().entries.map(
+              (entry) => Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Image ${entry.key + 1}:',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange[700],
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[100],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Q: ${entry.value.qualityScore.toStringAsFixed(1)} | R: ${entry.value.relevanceScore.toStringAsFixed(1)}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.orange[700],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Description:',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    Text(
+                      entry.value.description,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    if (entry.value.observations.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Observations:',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      Text(
+                        entry.value.observations,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                    if (entry.value.tags.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tags:',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 4,
+                        children: entry.value.tags.map((tag) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            tag,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              color: Colors.blue[700],
+                            ),
+                          ),
+                        )).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      'Timestamp: ${entry.value.timestamp.toString().substring(0, 19)}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )),
+          ] else if (_aiSuggestion?.imageAnalysis != null && _aiSuggestion!.imageAnalysis.isNotEmpty) ...[
+            // Fallback to string-based image analysis
+            Text(
+              'Image Analysis Count: ${_aiSuggestion!.imageAnalysis.length}',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.orange[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...(_aiSuggestion!.imageAnalysis.asMap().entries.map(
+              (entry) => Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Image ${entry.key + 1}:',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange[700],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Description: ${entry.value}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Note: Full ImageAnalysis data not available in current implementation',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )),
+          ] else ...[
+            Text(
+              'No images analyzed',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

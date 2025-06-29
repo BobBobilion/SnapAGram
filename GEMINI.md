@@ -1,5 +1,7 @@
 ## Gemini CLI Ruleset for SnapAGram Flutter Development
 
+STAY EXTREMELY FOCUSED ON THE TASK AT HAND.
+
 ### General Behavioral Guidelines
 
 * Always read and understand the entire file before making any modifications. Avoid piecemeal edits without full context.

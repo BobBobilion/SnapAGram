@@ -12,6 +12,7 @@ import '../../services/auth_service.dart';
 import '../../utils/app_theme.dart';
 import 'share_story_screen.dart';
 import 'text_overlay_notifier.dart';
+import 'package:path_provider/path_provider.dart';
 
 class PhotoEditorScreen extends ConsumerStatefulWidget {
   final String imagePath;
@@ -314,9 +315,9 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       
       if (byteData != null) {
-        // Save the final image
-        final tempDir = Directory.systemTemp;
-        final finalImagePath = '${tempDir.path}/edited_image_${DateTime.now().millisecondsSinceEpoch}.png';
+        // Save the final image to app documents directory for better persistence
+        final appDir = await getApplicationDocumentsDirectory();
+        final finalImagePath = '${appDir.path}/edited_image_${DateTime.now().millisecondsSinceEpoch}.png';
         final finalFile = File(finalImagePath);
         await finalFile.writeAsBytes(byteData.buffer.asUint8List());
         
@@ -336,12 +337,14 @@ class _PhotoEditorScreenState extends ConsumerState<PhotoEditorScreen> {
       }
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error saving image: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

@@ -50,12 +50,18 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
   List<String> _textRecommendations = [];
   bool _isLoadingRecommendations = false;
   bool _showRecommendations = true;
+  
+  // AI processing state
+  bool _isAiProcessing = false;
+  Timer? _aiProcessingTimer;
 
   @override
   void initState() {
     super.initState();
     _loadChatAndMessages();
     _startMessageTimer();
+    _startContextCleanupTimer();
+    _startAiProcessingMonitor();
     
     // Debug: Check API key on initialization
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -70,12 +76,49 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     _scrollController.dispose();
     _messageTimer?.cancel();
     _messagesSubscription?.cancel();
+    _aiProcessingTimer?.cancel();
     super.dispose();
   }
 
   void _startMessageTimer() {
     _messageTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateMessageTimers();
+    });
+  }
+
+  void _startContextCleanupTimer() {
+    // Clean up old contexts every 30 minutes to prevent memory leaks
+    Timer.periodic(const Duration(minutes: 30), (timer) {
+      if (mounted) {
+        final contextManager = ref.read(chatContextManagerProvider);
+        contextManager.clearOldContexts();
+        
+        // Log cache stats for monitoring
+        final stats = contextManager.getCacheStats();
+        print('📊 Context Cache Stats: $stats');
+      }
+    });
+  }
+
+  void _startAiProcessingMonitor() {
+    // Monitor AI processing status every 2 seconds
+    _aiProcessingTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (mounted) {
+        final contextManager = ref.read(chatContextManagerProvider);
+        final stats = contextManager.getCacheStats();
+        final isProcessing = stats['processingImages'] > 0;
+        
+        if (isProcessing != _isAiProcessing) {
+          setState(() {
+            _isAiProcessing = isProcessing;
+          });
+          if (isProcessing) {
+            print('🤖 AI processing started - ${stats['processingImages']} images being analyzed');
+          } else {
+            print('✅ AI processing completed');
+          }
+        }
+      }
     });
   }
 
@@ -88,6 +131,9 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
         setState(() {
           _messages = filteredMessages;
         });
+        
+        // Process messages in background for context
+        _processMessagesInBackground(filteredMessages);
         
         // Regenerate recommendations when new messages arrive
         if (_showRecommendations && !_isLoadingRecommendations) {
@@ -117,6 +163,32 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
             backgroundColor: Colors.red,
           ),
         );
+      }
+    });
+  }
+
+  // Process messages in background for context management
+  void _processMessagesInBackground(List<MessageModel> messages) {
+    if (messages.isEmpty) return;
+    
+    final contextManager = ref.read(chatContextManagerProvider);
+    final serviceManager = ref.read(appServiceManagerProvider);
+    final currentUser = serviceManager.currentUser;
+    
+    if (currentUser == null) return;
+
+    // Initialize or update chat context in background
+    Future.microtask(() async {
+      try {
+        await contextManager.getChatContext(
+          widget.chatId,
+          messages,
+          currentUser,
+          _otherUser,
+        );
+        print('🔄 Chat context updated in background');
+      } catch (e) {
+        print('❌ Error updating chat context: $e');
       }
     });
   }
@@ -165,6 +237,323 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
         _deletingMessages.remove(message.id);
       }
     }
+  }
+
+  Future<void> _deleteMessage(MessageModel message) async {
+    if (_deletingMessages.contains(message.id)) return;
+    
+    // Mark message as being deleted
+    setState(() {
+      _deletingMessages.add(message.id);
+    });
+
+    try {
+      final serviceManager = ref.read(appServiceManagerProvider);
+      // Delete message from server
+      await serviceManager.deleteMessage(message.id, forEveryone: true);
+      print('ChatConversationScreen: Deleted message ${message.id} from server');
+      
+      // The message will be removed from UI via the stream update
+    } catch (e) {
+      print('ChatConversationScreen: Failed to delete message ${message.id}: $e');
+      // Remove from deleting set so user can try again
+      setState(() {
+        _deletingMessages.remove(message.id);
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete message: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showDeleteConfirmation(MessageModel message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Delete Message',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        content: Text(
+          message.type == MessageType.image 
+              ? 'Are you sure you want to delete this image? This action cannot be undone.'
+              : 'Are you sure you want to delete this message? This action cannot be undone.',
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(color: Colors.grey[600]),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteMessage(message);
+            },
+            child: Text(
+              'Delete',
+              style: GoogleFonts.poppins(
+                color: Colors.red[600],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCacheDebugInfo() {
+    final contextManager = ref.read(chatContextManagerProvider);
+    final stats = contextManager.getCacheStats();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.analytics, color: Colors.blue[600]),
+            const SizedBox(width: 8),
+            Text(
+              'Cache Statistics',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildCacheStatItem('Total Chat Contexts', '${stats['totalContexts']}'),
+            _buildCacheStatItem('Images Being Processed', '${stats['processingImages']}'),
+            _buildCacheStatItem('Total Image Analyses', '${stats['totalImageAnalyses']}'),
+            const SizedBox(height: 16),
+            
+            // Current Chat Context Section
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Current Chat Context:',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Chat ID: ${widget.chatId}',
+                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600]),
+                  ),
+                  Text(
+                    'Messages: ${_messages.length}',
+                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600]),
+                  ),
+                  Text(
+                    'AI Processing: ${_isAiProcessing ? 'Active' : 'Idle'}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11, 
+                      color: _isAiProcessing ? Colors.orange[600] : Colors.green[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              // Clear cache
+              contextManager.clearOldContexts();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Cache cleared!'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            child: Text(
+              'Clear Cache',
+              style: GoogleFonts.poppins(color: Colors.red[600]),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Close',
+              style: GoogleFonts.poppins(color: Colors.grey[600]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContextCard(Map<String, dynamic> context) {
+    final isCurrentChat = context['contextKey'].toString().contains(widget.chatId);
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isCurrentChat ? Colors.blue[50] : Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isCurrentChat ? Colors.blue[200]! : Colors.grey[300]!,
+          width: isCurrentChat ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isCurrentChat ? Icons.chat : Icons.chat_bubble_outline,
+                size: 16,
+                color: isCurrentChat ? Colors.blue[600] : Colors.grey[600],
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  context['contextKey'].toString().substring(0, 20) + '...',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isCurrentChat ? Colors.blue[700] : Colors.grey[700],
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: context['ageInHours'] < 1 
+                      ? Colors.green[100] 
+                      : context['ageInHours'] < 12 
+                          ? Colors.orange[100] 
+                          : Colors.red[100],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${context['ageInHours']}h',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: context['ageInHours'] < 1 
+                        ? Colors.green[700] 
+                        : context['ageInHours'] < 12 
+                            ? Colors.orange[700] 
+                            : Colors.red[700],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              _buildContextStat('Msgs', '${context['messageCount']}'),
+              const SizedBox(width: 12),
+              _buildContextStat('Processed', '${context['processedMessageCount']}'),
+              const SizedBox(width: 12),
+              _buildContextStat('Images', '${context['imageAnalysisCount']}'),
+            ],
+          ),
+          if (context['imageAnalysisCount'] > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Image IDs: ${(context['imageAnalyses'] as List).take(3).join(', ')}${(context['imageAnalyses'] as List).length > 3 ? '...' : ''}',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          if (context['conversationSummary'].isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Summary: ${context['conversationSummary']}',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.grey[600],
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContextStat(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 9,
+            color: Colors.grey[500],
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCacheStatItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: Colors.grey[700],
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.blue[600],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   List<MessageModel> _filterExpiredMessages(List<MessageModel> messages) {
@@ -551,13 +940,46 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
         'jpg',
       );
 
-      // Send image message that expires in 30 seconds
+      // Send image message (no redundant analysis here - context manager will handle it)
       final serviceManager = ref.read(appServiceManagerProvider);
       await serviceManager.sendMessage(
         chatId: widget.chatId,
         type: MessageType.image,
         content: imageUrl,
+        // Don't pass imageAnalysis here - let context manager handle it
       );
+
+      // Process the new message in background context (context manager will analyze if needed)
+      final contextManager = ref.read(chatContextManagerProvider);
+      final user = serviceManager.currentUser;
+      if (user != null) {
+        // Create a temporary message model for context processing
+        final tempMessage = MessageModel(
+          id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+          chatId: widget.chatId,
+          senderId: user.uid,
+          senderUsername: user.handle,
+          type: MessageType.image,
+          content: imageUrl,
+          createdAt: DateTime.now(),
+          // No metadata needed - context manager will analyze
+        );
+        
+        // Process in background (context manager will handle deduplication)
+        Future.microtask(() async {
+          try {
+            await contextManager.processNewMessage(
+              widget.chatId,
+              tempMessage,
+              user,
+              _otherUser,
+            );
+            print('🔄 New image message queued for background processing');
+          } catch (e) {
+            print('❌ Error processing new message in context: $e');
+          }
+        });
+      }
 
       // The real-time stream will automatically update the UI with the new message
       // Scroll to bottom
@@ -815,34 +1237,44 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          // Debug button for testing recommendations
+          // AI Processing Indicator
+          if (_isAiProcessing)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.orange[600]!),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'AI',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          // Debug button for cache statistics
           IconButton(
-            icon: Icon(Icons.bug_report, color: Colors.grey[600]),
+            icon: Icon(Icons.analytics, color: Colors.grey[600]),
             onPressed: () {
-              print('🐛 Manual trigger of recommendations');
-              if (_showRecommendations && _textRecommendations.isNotEmpty) {
-                // Hide recommendations if they're showing
-                setState(() {
-                  _showRecommendations = false;
-                  _textRecommendations = [];
-                });
-                print('✅ Recommendations hidden via debug button');
-              } else {
-                // Show recommendations
-                setState(() {
-                  _showRecommendations = true;
-                });
-                _generateTextRecommendations();
-                print('✅ Recommendations shown via debug button');
-              }
+              _showCacheDebugInfo();
             },
           ),
           IconButton(
             icon: Icon(Icons.more_vert, color: Colors.grey[600]),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Chat options coming soon!')),
-              );
+              _showChatOptions();
             },
           ),
         ],
@@ -1064,6 +1496,7 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
 
   Widget _buildMessageItem(MessageModel message, bool isBottomMessage, userModel) {
     final isCurrentUser = message.senderId == ref.read(appServiceManagerProvider).currentUserId;
+    final isBeingDeleted = _deletingMessages.contains(message.id);
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -1072,160 +1505,201 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: _getMessageBubbleColor(isCurrentUser, userModel),
-                borderRadius: isBottomMessage 
-                    ? BorderRadius.only(
-                        topLeft: const Radius.circular(25),
-                        topRight: const Radius.circular(25),
-                        bottomLeft: isCurrentUser ? const Radius.circular(25) : const Radius.circular(6),
-                        bottomRight: isCurrentUser ? const Radius.circular(6) : const Radius.circular(25),
-                      )
-                    : BorderRadius.circular(25),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: isCurrentUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            child: GestureDetector(
+              onLongPress: isCurrentUser && !isBeingDeleted 
+                  ? () => _showDeleteConfirmation(message)
+                  : null,
+              child: Stack(
                 children: [
-                  if (!isCurrentUser && isBottomMessage) ...[
-                    Text(
-                      _getSenderDisplayName(message),
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[600],
-                      ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isBeingDeleted 
+                          ? Colors.grey[300]
+                          : _getMessageBubbleColor(isCurrentUser, userModel),
+                      borderRadius: isBottomMessage 
+                          ? BorderRadius.only(
+                              topLeft: const Radius.circular(25),
+                              topRight: const Radius.circular(25),
+                              bottomLeft: isCurrentUser ? const Radius.circular(25) : const Radius.circular(6),
+                              bottomRight: isCurrentUser ? const Radius.circular(6) : const Radius.circular(25),
+                            )
+                          : BorderRadius.circular(25),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 2,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                  ],
-                  
-                  // Message content
-                  if (message.type == MessageType.image)
-                    GestureDetector(
-                      onTap: () {
-                        // Show full-screen image viewer
-                        showDialog(
-                          context: context,
-                          builder: (context) => GestureDetector(
-                            onTap: () => Navigator.pop(context),
-                            child: Dialog(
-                              backgroundColor: Colors.transparent,
-                              insetPadding: EdgeInsets.zero,
-                              child: Container(
-                                width: double.infinity,
-                                height: double.infinity,
-                                color: Colors.black.withOpacity(0.8),
-                                child: Stack(
-                                  children: [
-                                    Center(
-                                      child: ConstrainedBox(
-                                        constraints: BoxConstraints(
-                                          maxWidth: MediaQuery.of(context).size.width * 0.9,
-                                          maxHeight: MediaQuery.of(context).size.height * 0.8,
-                                        ),
-                                        child: GestureDetector(
-                                          onTap: () {}, // Prevent tap from bubbling up
-                                          child: InteractiveViewer(
-                                            child: Image.network(
-                                              message.content,
-                                              fit: BoxFit.contain,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      top: 40,
-                                      right: 20,
-                                      child: IconButton(
-                                        icon: const Icon(
-                                          Icons.close,
-                                          color: Colors.white,
-                                          size: 30,
-                                        ),
-                                        onPressed: () => Navigator.pop(context),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                    child: Opacity(
+                      opacity: isBeingDeleted ? 0.5 : 1.0,
+                      child: Column(
+                        crossAxisAlignment: isCurrentUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                        children: [
+                          if (!isCurrentUser && isBottomMessage) ...[
+                            Text(
+                              _getSenderDisplayName(message),
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[600],
                               ),
                             ),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        constraints: const BoxConstraints(
-                          maxWidth: 200,
-                          maxHeight: 300,
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            message.content,
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Container(
-                                height: 150,
-                                width: 200,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[300],
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                height: 150,
-                                width: 200,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[300],
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.broken_image,
-                                      color: Colors.grey[600],
-                                      size: 32,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Failed to load image',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
+                            const SizedBox(height: 2),
+                          ],
+                          
+                          // Message content
+                          if (message.type == MessageType.image)
+                            GestureDetector(
+                              onTap: isBeingDeleted ? null : () {
+                                // Show full-screen image viewer
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => GestureDetector(
+                                    onTap: () => Navigator.pop(context),
+                                    child: Dialog(
+                                      backgroundColor: Colors.transparent,
+                                      insetPadding: EdgeInsets.zero,
+                                      child: Container(
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        color: Colors.black.withOpacity(0.8),
+                                        child: Stack(
+                                          children: [
+                                            Center(
+                                              child: ConstrainedBox(
+                                                constraints: BoxConstraints(
+                                                  maxWidth: MediaQuery.of(context).size.width * 0.9,
+                                                  maxHeight: MediaQuery.of(context).size.height * 0.8,
+                                                ),
+                                                child: GestureDetector(
+                                                  onTap: () {}, // Prevent tap from bubbling up
+                                                  child: InteractiveViewer(
+                                                    child: Image.network(
+                                                      message.content,
+                                                      fit: BoxFit.contain,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            Positioned(
+                                              top: 40,
+                                              right: 20,
+                                              child: IconButton(
+                                                icon: const Icon(
+                                                  Icons.close,
+                                                  color: Colors.white,
+                                                  size: 30,
+                                                ),
+                                                onPressed: () => Navigator.pop(context),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ],
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 200,
+                                  maxHeight: 300,
                                 ),
-                              );
-                            },
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    message.content,
+                                    fit: BoxFit.cover,
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Container(
+                                        height: 150,
+                                        width: 200,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[300],
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: const Center(
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        height: 150,
+                                        width: 200,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[300],
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.broken_image,
+                                              color: Colors.grey[600],
+                                              size: 32,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Failed to load image',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            Text(
+                              message.content,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                color: _getTextColor(isCurrentUser),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  // Show deleting indicator
+                  if (isBeingDeleted)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.3),
+                          borderRadius: isBottomMessage 
+                              ? BorderRadius.only(
+                                  topLeft: const Radius.circular(25),
+                                  topRight: const Radius.circular(25),
+                                  bottomLeft: isCurrentUser ? const Radius.circular(25) : const Radius.circular(6),
+                                  bottomRight: isCurrentUser ? const Radius.circular(6) : const Radius.circular(25),
+                                )
+                              : BorderRadius.circular(25),
+                        ),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
                           ),
                         ),
                       ),
-                    )
-                  else
-                    Text(
-                      message.content,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: _getTextColor(isCurrentUser),
-                      ),
                     ),
-
                 ],
               ),
             ),
@@ -1405,6 +1879,127 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
     );
   }
 
+  void _showChatOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            
+            // Title
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.settings, color: Colors.grey[600], size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Chat Options',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const Divider(),
+            
+            // Quick Replies Toggle
+            ListTile(
+              leading: Icon(
+                Icons.lightbulb_outline,
+                color: Colors.blue[600],
+                size: 24,
+              ),
+              title: Text(
+                'Quick Replies',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              subtitle: Text(
+                'Show AI-generated message suggestions',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+              trailing: Switch(
+                value: _showRecommendations,
+                onChanged: (value) {
+                  setState(() {
+                    _showRecommendations = value;
+                    if (!value) {
+                      _textRecommendations = [];
+                    } else if (_textRecommendations.isEmpty) {
+                      _generateTextRecommendations();
+                    }
+                  });
+                  Navigator.pop(context);
+                  
+                  // Show feedback
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        value ? 'Quick replies enabled' : 'Quick replies disabled',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      duration: const Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                      margin: const EdgeInsets.all(16),
+                    ),
+                  );
+                },
+                activeColor: Colors.blue[600],
+              ),
+            ),
+            
+            // Cancel option
+            ListTile(
+              leading: Icon(
+                Icons.close,
+                color: Colors.grey[600],
+                size: 24,
+              ),
+              title: Text(
+                'Cancel',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              onTap: () => Navigator.pop(context),
+            ),
+            
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class MessageTailPainter extends CustomPainter {

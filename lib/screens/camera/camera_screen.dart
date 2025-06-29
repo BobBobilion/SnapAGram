@@ -9,7 +9,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -247,7 +246,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   Icon _getFlashIcon() {
     return Icon(
       _isFlashOn ? Icons.flash_on : Icons.flash_off,
-      color: Colors.white,
+      color: Colors.black,
       size: 28,
     );
   }
@@ -330,26 +329,38 @@ class _CameraScreenState extends ConsumerState<CameraScreen> with WidgetsBinding
   }
 
   Widget _buildTopControls() {
-    return Positioned(
-      top: 16,
-      left: 16,
-      right: 16,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            onPressed: _toggleFlash,
-            icon: _getFlashIcon(),
-          ),
-          IconButton(
             onPressed: () {
-              // Open settings or something
+              Navigator.of(context).pop();
             },
             icon: const Icon(
-              Icons.settings,
-              color: Colors.white,
+              Icons.arrow_back,
+              color: Colors.black,
               size: 28,
             ),
+          ),
+          Row(
+            children: [
+              // IconButton(
+              //   onPressed: _toggleFlash,
+              //   icon: _getFlashIcon(),
+              // ),
+              IconButton(
+                onPressed: () {
+                  // Open settings or something
+                },
+                icon: const Icon(
+                  Icons.settings,
+                  color: Colors.black,
+                  size: 28,
+                ),
+              ),
+            ],
           ),
         ],
       ),

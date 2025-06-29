@@ -9,6 +9,7 @@ import '../../services/auth_service.dart';
 import '../../utils/app_theme.dart';
 import '../../models/story_model.dart';
 import 'text_overlay_notifier.dart';
+import '../../providers/ui_provider.dart';
 
 class VideoPostScreen extends ConsumerStatefulWidget {
   final String videoPath;
@@ -117,6 +118,9 @@ class _VideoPostScreenState extends ConsumerState<VideoPostScreen> {
             backgroundColor: Colors.green,
           ),
         );
+        
+        // Trigger refresh of explore screen
+        triggerExploreRefresh(ref);
         
         Navigator.popUntil(context, (route) => route.isFirst);
       }

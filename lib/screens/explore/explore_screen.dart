@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:snapagram/models/enums.dart';
@@ -9,6 +10,9 @@ import '../../services/app_service_manager.dart';
 import '../../services/auth_service.dart';
 import '../../models/story_model.dart';
 import '../../utils/app_theme.dart';
+import '../../providers/ui_provider.dart';
+import 'dart:async';
+import 'package:flutter/rendering.dart';
 
 class ExploreScreen extends ConsumerStatefulWidget {
   const ExploreScreen({super.key});
@@ -26,6 +30,11 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   bool _isLoadingFriends = false;
   List<StoryModel> _publicStories = [];
   List<StoryModel> _friendsStories = [];
+  Set<String> _autoViewedStories = {}; // Track stories that have been auto-viewed
+  Map<String, GlobalKey> _storyKeys = {}; // Track story keys for viewport detection
+  Timer? _viewportCheckTimer; // Debounce timer for viewport checks
+  Set<String> _doubleTapStories = {}; // Track stories that have been double-tapped
+  Map<String, bool> _heartAnimations = {}; // Track heart animation states
 
   @override
   void initState() {
@@ -33,6 +42,25 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     _tabController = TabController(length: 2, vsync: this);
     _loadPublicStories();
     _loadFriendsStories();
+    
+    // Add scroll listeners for viewport detection
+    _scrollController.addListener(_checkViewportVisibility);
+    _friendsScrollController.addListener(_checkViewportVisibility);
+    
+    // Add tab change listener
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        // Check viewport visibility when switching tabs
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _checkViewportVisibility();
+        });
+      }
+    });
+    
+    // Check visibility after initial build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkViewportVisibility();
+    });
   }
 
   @override
@@ -40,7 +68,82 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     _tabController.dispose();
     _scrollController.dispose();
     _friendsScrollController.dispose();
+    _viewportCheckTimer?.cancel();
     super.dispose();
+  }
+
+  void _checkViewportVisibility() {
+    // Debounce viewport checks to prevent excessive calls
+    _viewportCheckTimer?.cancel();
+    _viewportCheckTimer = Timer(const Duration(milliseconds: 100), () {
+      if (!mounted) return;
+      
+      final currentStories = _tabController.index == 0 ? _publicStories : _friendsStories;
+      
+      for (final story in currentStories) {
+        final key = _storyKeys[story.id];
+        if (key?.currentContext != null && !_autoViewedStories.contains(story.id)) {
+          final renderBox = key!.currentContext!.findRenderObject() as RenderBox?;
+          if (renderBox != null) {
+            final position = renderBox.localToGlobal(Offset.zero);
+            final size = renderBox.size;
+            final screenHeight = MediaQuery.of(context).size.height;
+            
+            // Check if story is visible in viewport (more than 50% visible)
+            final isVisible = position.dy < screenHeight && 
+                             position.dy + size.height > 0 &&
+                             (position.dy + size.height * 0.5) < screenHeight;
+            
+            if (isVisible) {
+              _autoViewStory(story);
+            }
+          }
+        }
+      }
+    });
+  }
+
+  Future<void> _autoViewStory(StoryModel story) async {
+    if (_autoViewedStories.contains(story.id)) return;
+    
+    final currentUserId = ref.read(appServiceManagerProvider).currentUserId ?? '';
+    if (story.hasUserViewed(currentUserId)) return;
+    
+    // Add to auto-viewed set to prevent duplicate tracking
+    _autoViewedStories.add(story.id);
+    
+    // Update story optimistically
+    final updatedStory = _updateStoryViewOptimistically(story, currentUserId);
+    final publicStoryIndex = _publicStories.indexWhere((s) => s.id == story.id);
+    final friendsStoryIndex = _friendsStories.indexWhere((s) => s.id == story.id);
+
+    setState(() {
+      if (publicStoryIndex != -1) {
+        _publicStories[publicStoryIndex] = updatedStory;
+      }
+      if (friendsStoryIndex != -1) {
+        _friendsStories[friendsStoryIndex] = updatedStory;
+      }
+    });
+
+    try {
+      await ref.read(appServiceManagerProvider).viewStory(story.id);
+      // Silently update the view count without showing a snackbar for auto-views
+      print('Auto-viewed story: ${story.id} by user: $currentUserId');
+    } catch (e) {
+      // Revert optimistic update on error
+      setState(() {
+        if (publicStoryIndex != -1) {
+          _publicStories[publicStoryIndex] = story;
+        }
+        if (friendsStoryIndex != -1) {
+          _friendsStories[friendsStoryIndex] = story;
+        }
+      });
+      // Remove from auto-viewed set so it can be retried
+      _autoViewedStories.remove(story.id);
+      print('Failed to auto-view story: ${story.id}, error: $e');
+    }
   }
 
   Future<void> _loadPublicStories() async {
@@ -53,6 +156,11 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         setState(() {
           _publicStories = stories;
           _isLoadingPublic = false;
+        });
+        _cleanupStoryKeys();
+        // Check viewport visibility after loading new stories
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _checkViewportVisibility();
         });
       }
     } catch (e) {
@@ -78,6 +186,11 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         setState(() {
           _friendsStories = stories;
           _isLoadingFriends = false;
+        });
+        _cleanupStoryKeys();
+        // Check viewport visibility after loading new stories
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _checkViewportVisibility();
         });
       }
     } catch (e) {
@@ -156,6 +269,15 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     final authService = ref.watch(authServiceProvider);
     final userModel = authService.userModel;
     final primaryColor = AppTheme.getPrimaryColor(userModel);
+
+    // Listen to explore refresh trigger
+    ref.listen<int>(exploreRefreshTriggerProvider, (previous, next) {
+      if (previous != null && next > previous) {
+        // Trigger refresh of both story lists
+        _loadPublicStories();
+        _loadFriendsStories();
+      }
+    });
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -310,6 +432,11 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   }
 
   Widget _buildStoryCard(StoryModel story, String storyType, userModel) {
+    // Ensure we have a key for this story
+    if (!_storyKeys.containsKey(story.id)) {
+      _storyKeys[story.id] = GlobalKey();
+    }
+    
     final timeAgo = _getTimeAgo(story.createdAt);
     final isLiked =
         story.hasUserLiked(ref.read(appServiceManagerProvider).currentUserId ?? '');
@@ -319,6 +446,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         story.creatorRole == UserRole.walker ? Colors.green : Colors.blue;
 
     return Card(
+      key: _storyKeys[story.id],
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -396,6 +524,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           ),
           GestureDetector(
             onTap: () => _viewStory(story),
+            onDoubleTap: () => _handleDoubleTapLike(story),
             child: Container(
               height: 300,
               width: double.infinity,
@@ -424,6 +553,55 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                             fontSize: 10,
                             color: Colors.white,
                             fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // Debug indicator for auto-viewed stories
+                  if (_autoViewedStories.contains(story.id) && !isViewed)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Auto-viewed',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // Double tap heart animation
+                  if (_heartAnimations[story.id] == true)
+                    Positioned.fill(
+                      child: Center(
+                        child: AnimatedOpacity(
+                          opacity: 1.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: AnimatedScale(
+                            scale: 1.0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutBack,
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.3),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.favorite,
+                                size: 60,
+                                color: Colors.red,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -511,6 +689,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
   }
 
   void _showStoryOptions(BuildContext context, StoryModel story) {
+    final currentUserId = ref.read(appServiceManagerProvider).currentUserId ?? '';
+    final isOwnStory = story.uid == currentUserId;
+    
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
@@ -518,6 +699,17 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (isOwnStory) ...[
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete Story'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteStory(story);
+                },
+              ),
+              const Divider(),
+            ],
             ListTile(
               leading: const Icon(Icons.report),
               title: const Text('Report Story'),
@@ -541,6 +733,98 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           ],
         ),
       ),
+    );
+  }
+
+  void _deleteStory(StoryModel story) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(
+            'Delete Story',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          content: Text(
+            'Are you sure you want to delete this story? This action cannot be undone.',
+            style: GoogleFonts.poppins(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                try {
+                  Navigator.of(context).pop();
+                  
+                  // Show loading indicator
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          CircularProgressIndicator(strokeWidth: 2),
+                          SizedBox(width: 16),
+                          Text('Deleting story...'),
+                        ],
+                      ),
+                      backgroundColor: Colors.orange,
+                      duration: Duration(milliseconds: 500),
+                    ),
+                  );
+
+                  final serviceManager = ref.read(appServiceManagerProvider);
+                  await serviceManager.deleteStory(story.id);
+                  
+                  // Immediately remove the story from local state
+                  setState(() {
+                    _publicStories.removeWhere((s) => s.id == story.id);
+                    _friendsStories.removeWhere((s) => s.id == story.id);
+                    // Also clean up any tracking sets
+                    _autoViewedStories.remove(story.id);
+                    _doubleTapStories.remove(story.id);
+                    _heartAnimations.remove(story.id);
+                    _storyKeys.remove(story.id);
+                  });
+                  
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Story deleted successfully!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                    
+                    // Refresh both story lists to ensure everything is in sync
+                    await _loadPublicStories();
+                    await _loadFriendsStories();
+                  }
+                } catch (e) {
+                  print('Error deleting story: $e');
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error deleting story: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: Text(
+                'Delete',
+                style: TextStyle(color: Colors.red[600]),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -857,6 +1141,57 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
         child: CircularProgressIndicator(),
       ),
     );
+  }
+
+  void _cleanupStoryKeys() {
+    // Remove keys for stories that are no longer in the lists
+    final currentStoryIds = <String>{};
+    currentStoryIds.addAll(_publicStories.map((s) => s.id));
+    currentStoryIds.addAll(_friendsStories.map((s) => s.id));
+    
+    _storyKeys.removeWhere((key, value) => !currentStoryIds.contains(key));
+    
+    // Clean up animation states for stories that are no longer in the lists
+    _heartAnimations.removeWhere((key, value) => !currentStoryIds.contains(key));
+    _doubleTapStories.removeWhere((storyId) => !currentStoryIds.contains(storyId));
+  }
+
+  void _handleDoubleTapLike(StoryModel story) {
+    if (_doubleTapStories.contains(story.id)) {
+      return;
+    }
+    
+    // Add haptic feedback for better user experience
+    HapticFeedback.lightImpact();
+    
+    // Add to double tap set to prevent multiple rapid taps
+    _doubleTapStories.add(story.id);
+    
+    // Start heart animation
+    setState(() {
+      _heartAnimations[story.id] = true;
+    });
+    
+    // Toggle like status
+    _toggleLike(story);
+    
+    // Remove animation after completion
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _heartAnimations.remove(story.id);
+        });
+      }
+    });
+    
+    // Allow future double taps after a delay
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        setState(() {
+          _doubleTapStories.remove(story.id);
+        });
+      }
+    });
   }
 }
 

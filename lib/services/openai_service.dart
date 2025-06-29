@@ -9,6 +9,281 @@ final openAIServiceProvider = Provider<OpenAIService>((ref) {
   return OpenAIService();
 });
 
+final chatContextManagerProvider = Provider<ChatContextManager>((ref) {
+  return ChatContextManager(ref.read(openAIServiceProvider));
+});
+
+// Background chat context manager for instant review generation
+class ChatContextManager {
+  final OpenAIService _openAIService;
+  final Map<String, ChatContext> _contextCache = {};
+  final Set<String> _processingImages = {}; // Track images being processed
+
+  ChatContextManager(this._openAIService);
+
+  // Get or create chat context for a conversation
+  Future<ChatContext> getChatContext(String chatId, List<MessageModel> messages, UserModel currentUser, UserModel? otherUser) async {
+    final contextKey = '${chatId}_${currentUser.uid}_${otherUser?.uid}';
+    
+    // Check if we have cached context
+    if (_contextCache.containsKey(contextKey)) {
+      final cached = _contextCache[contextKey]!;
+      // Update with new messages if needed
+      if (messages.length > cached.processedMessageCount) {
+        return await _updateChatContext(cached, messages, currentUser, otherUser);
+      }
+      return cached;
+    }
+
+    // Create new context
+    return await _createChatContext(contextKey, messages, currentUser, otherUser);
+  }
+
+  // Process new message in background (only if needed)
+  Future<void> processNewMessage(String chatId, MessageModel message, UserModel currentUser, UserModel? otherUser) async {
+    final contextKey = '${chatId}_${currentUser.uid}_${otherUser?.uid}';
+    
+    if (!_contextCache.containsKey(contextKey)) return;
+
+    final context = _contextCache[contextKey]!;
+    
+    // Add message to context
+    context.messages.add(message);
+    context.processedMessageCount++;
+    context.lastUpdated = DateTime.now();
+
+    // Only process image if it hasn't been analyzed before
+    if (message.type == MessageType.image && 
+        !context.imageAnalyses.containsKey(message.id) &&
+        !_processingImages.contains(message.id)) {
+      _processImageInBackground(message, context);
+    }
+
+    // Update conversation summary (no AI call needed)
+    context.conversationSummary = _buildConversationSummary(context.messages, currentUser, otherUser);
+  }
+
+  // Create new chat context with full processing
+  Future<ChatContext> _createChatContext(String contextKey, List<MessageModel> messages, UserModel currentUser, UserModel? otherUser) async {
+    print('🔄 Creating new chat context for $contextKey');
+    
+    final context = ChatContext(
+      contextKey: contextKey,
+      messages: List.from(messages),
+      processedMessageCount: messages.length,
+      lastUpdated: DateTime.now(),
+      imageAnalyses: {},
+      conversationSummary: '',
+    );
+
+    // Process only images that haven't been analyzed before
+    final imageMessages = messages.where((m) => m.type == MessageType.image).toList();
+    final unprocessedImages = imageMessages.where((m) => 
+      !context.imageAnalyses.containsKey(m.id) && 
+      !_processingImages.contains(m.id)
+    ).toList();
+
+    // Process unprocessed images in parallel (but limit to avoid API spam)
+    final imagesToProcess = unprocessedImages.take(5).toList(); // Limit to 5 images max
+    for (final imageMessage in imagesToProcess) {
+      await _processImageAnalysis(imageMessage, context);
+    }
+
+    // Build conversation summary
+    context.conversationSummary = _buildConversationSummary(messages, currentUser, otherUser);
+
+    _contextCache[contextKey] = context;
+    print('✅ Chat context created with ${imagesToProcess.length} new images processed');
+    
+    return context;
+  }
+
+  // Update existing context with new messages
+  Future<ChatContext> _updateChatContext(ChatContext context, List<MessageModel> messages, UserModel currentUser, UserModel? otherUser) async {
+    final newMessages = messages.skip(context.processedMessageCount).toList();
+    
+    for (final message in newMessages) {
+      context.messages.add(message);
+      
+      // Only process images that haven't been analyzed
+      if (message.type == MessageType.image && 
+          !context.imageAnalyses.containsKey(message.id) &&
+          !_processingImages.contains(message.id)) {
+        await _processImageAnalysis(message, context);
+      }
+    }
+
+    context.processedMessageCount = messages.length;
+    context.lastUpdated = DateTime.now();
+    context.conversationSummary = _buildConversationSummary(context.messages, currentUser, otherUser);
+
+    return context;
+  }
+
+  // Process image analysis and store in context (with deduplication)
+  Future<void> _processImageAnalysis(MessageModel message, ChatContext context) async {
+    // Check if already processed or being processed
+    if (context.imageAnalyses.containsKey(message.id) || _processingImages.contains(message.id)) {
+      return;
+    }
+
+    // Mark as being processed
+    _processingImages.add(message.id);
+    
+    try {
+      final analysis = await _openAIService.analyzeImage(message.content);
+      if (analysis != null) {
+        context.imageAnalyses[message.id] = analysis;
+        print('📸 Image analysis completed for message ${message.id}');
+      }
+    } catch (e) {
+      print('❌ Error analyzing image ${message.id}: $e');
+    } finally {
+      // Remove from processing set
+      _processingImages.remove(message.id);
+    }
+  }
+
+  // Process image in background (fire and forget) - only if not already processed
+  void _processImageInBackground(MessageModel message, ChatContext context) {
+    // Skip if already processed or being processed
+    if (context.imageAnalyses.containsKey(message.id) || _processingImages.contains(message.id)) {
+      return;
+    }
+    
+    _processImageAnalysis(message, context).catchError((e) {
+      print('Background image processing failed: $e');
+      _processingImages.remove(message.id);
+    });
+  }
+
+  // Build comprehensive conversation summary (no AI calls)
+  String _buildConversationSummary(List<MessageModel> messages, UserModel currentUser, UserModel? otherUser) {
+    final summary = StringBuffer();
+    
+    summary.writeln('=== CHAT CONTEXT SUMMARY ===');
+    summary.writeln('Participants: ${currentUser.displayName} & ${otherUser?.displayName ?? 'Unknown'}');
+    summary.writeln('Total Messages: ${messages.length}');
+    summary.writeln('Last Updated: ${DateTime.now()}');
+    summary.writeln();
+
+    // Add recent conversation (last 10 messages)
+    final recentMessages = messages.take(10).toList().reversed;
+    summary.writeln('Recent Conversation:');
+    
+    for (final message in recentMessages) {
+      final isCurrentUser = message.senderId == currentUser.uid;
+      final senderName = isCurrentUser ? currentUser.displayName.split(' ').first : (otherUser?.displayName.split(' ').first ?? 'Other');
+      final timestamp = message.createdAt.toString().substring(11, 16);
+      
+      if (message.type == MessageType.text) {
+        summary.writeln('[$timestamp] $senderName: ${message.content}');
+      } else if (message.type == MessageType.image) {
+        // Include analysis if available
+        final analysis = message.metadata['imageAnalysis'] as String?;
+        if (analysis != null) {
+          summary.writeln('[$timestamp] $senderName: [Image: $analysis]');
+        } else {
+          summary.writeln('[$timestamp] $senderName: [Image sent]');
+        }
+      }
+    }
+
+    return summary.toString();
+  }
+
+  // Get ready-to-use context for review generation
+  String getContextForReview(String chatId, UserModel currentUser, UserModel? otherUser) {
+    final contextKey = '${chatId}_${currentUser.uid}_${otherUser?.uid}';
+    final context = _contextCache[contextKey];
+    
+    if (context == null) return 'No conversation context available.';
+
+    final reviewContext = StringBuffer();
+    reviewContext.writeln(context.conversationSummary);
+    
+    // Add image analyses that aren't already in the summary
+    final summaryImages = context.messages
+        .where((m) => m.type == MessageType.image && m.metadata['imageAnalysis'] == null)
+        .toList();
+    
+    if (summaryImages.isNotEmpty) {
+      reviewContext.writeln();
+      reviewContext.writeln('=== ADDITIONAL IMAGE ANALYSES ===');
+      summaryImages.forEach((message) {
+        final analysis = context.imageAnalyses[message.id];
+        if (analysis != null) {
+          reviewContext.writeln('Image Analysis: $analysis');
+          reviewContext.writeln();
+        }
+      });
+    }
+
+    return reviewContext.toString();
+  }
+
+  // Clear old contexts to manage memory (more aggressive cleanup)
+  void clearOldContexts() {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24)); // Changed back to 24h
+    final removedCount = _contextCache.length;
+    _contextCache.removeWhere((key, context) => context.lastUpdated.isBefore(cutoff));
+    final remainingCount = _contextCache.length;
+    
+    if (removedCount != remainingCount) {
+      print('🧹 Cleaned up ${removedCount - remainingCount} old chat contexts');
+    }
+  }
+
+  // Get cache statistics for monitoring
+  Map<String, dynamic> getCacheStats() {
+    return {
+      'totalContexts': _contextCache.length,
+      'processingImages': _processingImages.length,
+      'totalImageAnalyses': _contextCache.values
+          .map((c) => c.imageAnalyses.length)
+          .fold(0, (a, b) => a + b),
+    };
+  }
+
+  // Get detailed context information for debugging
+  List<Map<String, dynamic>> getDetailedContextInfo() {
+    return _contextCache.entries.map((entry) {
+      final context = entry.value;
+      return {
+        'contextKey': context.contextKey,
+        'messageCount': context.messages.length,
+        'processedMessageCount': context.processedMessageCount,
+        'imageAnalysisCount': context.imageAnalyses.length,
+        'lastUpdated': context.lastUpdated,
+        'ageInHours': DateTime.now().difference(context.lastUpdated).inHours,
+        'imageAnalyses': context.imageAnalyses.keys.toList(),
+        'conversationSummary': context.conversationSummary.length > 100 
+            ? '${context.conversationSummary.substring(0, 100)}...' 
+            : context.conversationSummary,
+      };
+    }).toList();
+  }
+}
+
+// Chat context data structure
+class ChatContext {
+  final String contextKey;
+  final List<MessageModel> messages;
+  int processedMessageCount;
+  DateTime lastUpdated;
+  final Map<String, String> imageAnalyses; // messageId -> analysis
+  String conversationSummary;
+
+  ChatContext({
+    required this.contextKey,
+    required this.messages,
+    required this.processedMessageCount,
+    required this.lastUpdated,
+    required this.imageAnalyses,
+    required this.conversationSummary,
+  });
+}
+
 class OpenAIService {
   static const String _baseUrl = 'https://api.openai.com/v1/chat/completions';
 
@@ -96,6 +371,58 @@ class OpenAIService {
     } catch (e) {
       print('Error generating text recommendations: $e');
       return _getFallbackSuggestions(lastMessage);
+    }
+  }
+
+  Future<String?> analyzeImage(String imageUrl) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
+        body: jsonEncode({
+          'model': 'gpt-4o',
+          'messages': [
+            {
+              'role': 'system',
+              'content': '''You are an expert AI assistant for a dog walking app. Your task is to analyze an image from a chat between a dog owner and a dog walker. Provide a detailed, objective description of the image in plain text. This description will be used by another LLM to understand the context of the conversation.
+
+Focus on these key areas:
+1.  **Environment:** Describe the location (e.g., park, sidewalk, inside a home), weather conditions, time of day, and any notable objects or hazards.
+2.  **Dog's Apparent State:** Describe the dog's breed (if identifiable), size, and any visible emotional indicators (e.g., "The dog appears relaxed, with a loosely wagging tail," or "The dog seems anxious, with its ears back and body tense"). Be objective.
+3.  **Interaction & Safety:** Note any interactions between the dog and people or other animals. Identify potential safety concerns (e.g., "The dog is off-leash near a busy street," or "The leash appears frayed").
+4.  **Other Relevant Details:** Mention any other details that could be relevant for a dog walker or owner, such as toys, food, or other equipment present.
+
+Do not offer advice or opinions. Simply describe what you see in a structured, clear format. The output must be a single block of text.'''
+            },
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'image_url',
+                  'image_url': {
+                    'url': imageUrl,
+                  }
+                }
+              ]
+            }
+          ],
+          'max_tokens': 400,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['choices'][0]['message']['content'] as String?;
+      } else {
+        print('OpenAI Image Analysis Error: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error analyzing image: $e');
+      return null;
     }
   }
 

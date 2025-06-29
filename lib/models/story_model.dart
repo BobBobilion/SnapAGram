@@ -221,8 +221,13 @@ class StoryModel {
 
   // Check if user can view this story
   bool canUserView(String userId) {
-    if (visibility == StoryVisibility.public) return true;
-    if (uid == userId) return true; // creator can always view
+    if (visibility == StoryVisibility.public) {
+      return true;
+    }
+    if (uid == userId) {
+      return true; // creator can always view
+    }
+    
     return allowedViewers.contains(userId);
   }
 

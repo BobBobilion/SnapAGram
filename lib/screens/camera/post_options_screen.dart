@@ -6,6 +6,7 @@ import '../../services/app_service_manager.dart';
 import '../../services/auth_service.dart';
 import '../../models/story_model.dart';
 import '../../utils/app_theme.dart';
+import '../../providers/ui_provider.dart';
 
 class PostOptionsScreen extends ConsumerStatefulWidget {
   final String imagePath;
@@ -42,6 +43,12 @@ class _PostOptionsScreenState extends ConsumerState<PostOptionsScreen> {
       final isPublic = _selectedVisibility == 'public';
       final caption = _captionController.text.trim();
       
+      // Check if the image file exists
+      final imageFile = File(widget.imagePath);
+      if (!await imageFile.exists()) {
+        throw Exception('Image file not found. Please try taking a new photo.');
+      }
+      
       setState(() => _uploadStatus = 'Uploading image...');
       
       // Create the story using the service manager - it will handle Firebase Storage upload
@@ -58,30 +65,53 @@ class _PostOptionsScreenState extends ConsumerState<PostOptionsScreen> {
       print('Story created with ID: $storyId');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isPublic ? 'Posted to public stories!' : 'Posted to friends only!',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        // Navigate back to main app
+        // Navigate back to main app first
         Navigator.popUntil(context, (route) => route.isFirst);
+        
+        // Trigger refresh of explore screen
+        triggerExploreRefresh(ref);
+        
+        // Show success message after navigation
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  isPublic ? 'Posted to public stories!' : 'Posted to friends only!',
+                ),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        });
       }
     } catch (e) {
-      setState(() {
-        _isPosting = false;
-        _uploadStatus = '';
-      });
+      print('Error posting story: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error posting: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        setState(() {
+          _isPosting = false;
+          _uploadStatus = '';
+        });
+        
+        // Use a delayed call to ensure the widget is still mounted
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error posting: $e'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        });
+      } else {
+        // Widget is not mounted, just reset state
+        setState(() {
+          _isPosting = false;
+          _uploadStatus = '';
+        });
       }
     }
   }

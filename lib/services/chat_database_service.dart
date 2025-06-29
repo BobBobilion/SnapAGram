@@ -180,6 +180,7 @@ class ChatDatabaseService {
     String? replyToMessageId,
     bool allowScreenshot = true,
     bool deleteAfterView = false,
+    String? imageAnalysis,
   }) async {
     try {
       // Get chat to verify sender is participant
@@ -210,6 +211,9 @@ class ChatDatabaseService {
         replyToMessageId: replyToMessageId,
         allowScreenshot: allowScreenshot,
         deleteAfterView: deleteAfterView,
+        metadata: {
+          if (imageAnalysis != null) 'imageAnalysis': imageAnalysis,
+        },
       );
 
       final batch = _firestore.batch();

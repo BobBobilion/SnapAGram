@@ -103,24 +103,22 @@ class StoryDatabaseService {
         query = query.startAfterDocument(lastDocument);
       }
 
-      final snapshot = await query.get();
-      final allStories = snapshot.docs.map((doc) => StoryModel.fromSnapshot(doc)).toList();
-      
-      // If no userId provided, only return public stories (for unauthenticated users)
-      if (userId == null) {
-        return allStories
-            .where((story) => story.visibility == StoryVisibility.public)
-            .take(limit)
-            .toList();
+      final querySnapshot = await query.get();
+      final stories = <StoryModel>[];
+
+      for (final doc in querySnapshot.docs) {
+        final story = StoryModel.fromSnapshot(doc);
+        
+        // Filter stories based on user permissions
+        if (userId == null || story.canUserView(userId)) {
+          stories.add(story);
+          
+          // Stop if we have enough stories
+          if (stories.length >= limit) break;
+        }
       }
-      
-      // Filter stories based on what the user can view
-      final visibleStories = allStories
-          .where((story) => story.canUserView(userId))
-          .take(limit)
-          .toList();
-      
-      return visibleStories;
+
+      return stories;
     } catch (e) {
       throw Exception('Failed to get public stories: $e');
     }
@@ -134,7 +132,9 @@ class StoryDatabaseService {
   }) async {
     try {
       final user = await UserDatabaseService.getUserById(userId);
-      if (user == null || user.connections.isEmpty) return [];
+      if (user == null || user.connections.isEmpty) {
+        return [];
+      }
 
       final stories = <StoryModel>[];
       final storyIds = <String>{};
@@ -145,25 +145,27 @@ class StoryDatabaseService {
           .where('expiresAt', isGreaterThan: Timestamp.fromDate(DateTime.now()))
           .orderBy('expiresAt')
           .orderBy('createdAt', descending: true)
-          .limit(limit);
+          .limit(limit * 2); // Get more to account for filtering
 
       if (lastDocument != null) {
         query = query.startAfterDocument(lastDocument);
       }
 
-      final snapshot = await query.get();
-      final allStories = snapshot.docs.map((doc) => StoryModel.fromSnapshot(doc)).toList();
-      
-      // Filter stories that user can view and add to collection (excluding own posts)
-      for (final story in allStories) {
-        if (!storyIds.contains(story.id) && 
-            story.canUserView(userId) && 
-            story.uid != userId) { // Exclude user's own posts
+      final querySnapshot = await query.get();
+
+      for (final doc in querySnapshot.docs) {
+        final story = StoryModel.fromSnapshot(doc);
+        
+        // Only include stories that the user can view and haven't been added yet
+        if (story.canUserView(userId) && !storyIds.contains(story.id)) {
           stories.add(story);
           storyIds.add(story.id);
+          
+          // Stop if we have enough stories
+          if (stories.length >= limit) break;
         }
       }
-      
+
       return stories;
     } catch (e) {
       throw Exception('Failed to get friends stories: $e');

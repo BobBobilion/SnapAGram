@@ -5,9 +5,13 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:snapagram/models/review.dart';
 import 'package:snapagram/models/user_model.dart';
 import 'package:snapagram/services/conversation_analysis_service.dart';
+import 'package:snapagram/services/openai_service.dart';
 
 final aiReviewServiceProvider = Provider<AiReviewService>((ref) {
-  return AiReviewService(ref.read(conversationAnalysisServiceProvider));
+  return AiReviewService(
+    ref.read(conversationAnalysisServiceProvider),
+    ref.read(chatContextManagerProvider),
+  );
 });
 
 class AiReviewService {
@@ -22,36 +26,45 @@ class AiReviewService {
   }
   
   final ConversationAnalysisService _conversationAnalysisService;
+  final ChatContextManager _chatContextManager;
   
-  AiReviewService(this._conversationAnalysisService);
+  AiReviewService(this._conversationAnalysisService, this._chatContextManager);
   
-  // Analyze conversation and images to generate review suggestion
+  // Fast review generation using pre-processed context
   Future<AiReviewSuggestion> generateReviewSuggestion({
     required String reviewerId,
     required String targetUserId,
     required UserModel reviewer,
     required UserModel targetUser,
+    String? chatId,
   }) async {
     try {
-      // Use the new conversation analysis service for comprehensive analysis
-      final conversationAnalysis = await _conversationAnalysisService.analyzeConversation(
-        reviewerId: reviewerId,
-        targetUserId: targetUserId,
+      print('🚀 [FAST-REVIEW] Starting instant review generation...');
+      
+      // Try to get pre-processed context first (instant)
+      String? contextData;
+      if (chatId != null) {
+        contextData = _chatContextManager.getContextForReview(chatId, reviewer, targetUser);
+        print('📋 [FAST-REVIEW] Using pre-processed context');
+      }
+      
+      // If no pre-processed context available, fall back to full analysis
+      if (contextData == null || contextData == 'No conversation context available.') {
+        print('⚠️ [FAST-REVIEW] No pre-processed context, falling back to full analysis');
+        return await _generateWithFullAnalysis(reviewerId, targetUserId, reviewer, targetUser);
+      }
+
+      // Generate review using pre-processed context (much faster)
+      final suggestion = await _generateReviewWithPreprocessedContext(
         reviewer: reviewer,
         targetUser: targetUser,
-        lookbackPeriod: const Duration(hours: 48), // Extended analysis period
+        contextData: contextData,
       );
       
-      // Generate review using the comprehensive analysis
-      final suggestion = await _generateReviewWithAI(
-        reviewer: reviewer,
-        targetUser: targetUser,
-        conversationAnalysis: conversationAnalysis,
-      );
-      
+      print('✅ [FAST-REVIEW] Review generated instantly using cached context');
       return suggestion;
     } catch (e) {
-      print('Error generating AI review suggestion: $e');
+      print('❌ [FAST-REVIEW] Error: $e');
       // Return default suggestion on error
       return AiReviewSuggestion(
         suggestedRating: 3.0,
@@ -63,9 +76,75 @@ class AiReviewService {
     }
   }
 
+  // Fast review generation with pre-processed context
+  Future<AiReviewSuggestion> _generateReviewWithPreprocessedContext({
+    required UserModel reviewer,
+    required UserModel targetUser,
+    required String contextData,
+  }) async {
+    try {
+      final prompt = _createFastReviewPrompt(reviewer, targetUser, contextData);
+      final response = await _callOpenAI(prompt, maxTokens: 200); // Reduced for 400 character limit
+      return _parseAIResponse(response);
+    } catch (e) {
+      print('Error generating fast review: $e');
+      rethrow;
+    }
+  }
 
+  // Fallback to full analysis if no cached context
+  Future<AiReviewSuggestion> _generateWithFullAnalysis(
+    String reviewerId,
+    String targetUserId,
+    UserModel reviewer,
+    UserModel targetUser,
+  ) async {
+    // Use the existing conversation analysis service as fallback
+    final conversationAnalysis = await _conversationAnalysisService.analyzeConversation(
+      reviewerId: reviewerId,
+      targetUserId: targetUserId,
+      reviewer: reviewer,
+      targetUser: targetUser,
+      lookbackPeriod: const Duration(hours: 48),
+    );
+    
+    return await _generateReviewWithAI(
+      reviewer: reviewer,
+      targetUser: targetUser,
+      conversationAnalysis: conversationAnalysis,
+    );
+  }
 
-  // Generate review using OpenAI API with comprehensive conversation analysis
+  // Create optimized prompt for fast review generation
+  String _createFastReviewPrompt(UserModel reviewer, UserModel targetUser, String contextData) {
+    final targetRole = targetUser.isWalker ? 'dog walker' : 'dog owner';
+    final reviewerRole = reviewer.isOwner ? 'dog owner' : 'dog walker';
+    
+    return '''
+Generate a concise review for a $targetRole based on pre-analyzed conversation data.
+
+Reviewer: $reviewerRole (${reviewer.displayName})
+Target: $targetRole (${targetUser.displayName})
+
+PRE-PROCESSED CONTEXT:
+$contextData
+
+Generate a balanced review with:
+- Rating: 1-5 (decimals allowed)
+- Comment: Maximum 400 characters, professional and specific
+- Key highlights: 2-3 specific observations
+
+Focus on: ${targetUser.isWalker ? 'communication, reliability, care quality' : 'cooperation, clarity, payment reliability'}
+
+Return JSON format:
+{
+  "rating": 4.2,
+  "comment": "Brief, specific review under 400 characters...",
+  "highlights": ["specific point 1", "specific point 2"]
+}''';
+  }
+
+  // Generate review using OpenAI API with comprehensive conversation analysis (fallback)
   Future<AiReviewSuggestion> _generateReviewWithAI({
     required UserModel reviewer,
     required UserModel targetUser,
@@ -80,7 +159,7 @@ class AiReviewService {
       );
       
       // Make API call to OpenAI
-      final response = await _callOpenAI(prompt);
+      final response = await _callOpenAI(prompt, maxTokens: 200); // Reduced for 400 character limit
       
       // Parse response with enhanced data
       return _parseEnhancedAIResponse(response, conversationAnalysis);
@@ -90,9 +169,7 @@ class AiReviewService {
     }
   }
 
-
-
-  // Create enhanced context-aware prompt for review generation
+  // Create enhanced context-aware prompt for review generation (fallback)
   String _createEnhancedReviewPrompt({
     required UserModel reviewer,
     required UserModel targetUser,
@@ -131,19 +208,50 @@ Instructions:
 3. Reference specific observations from conversation chunks and image analyses
 4. Provide a rating from 1-5 (decimals allowed, e.g., 3.7)
 5. Be objective and fair, acknowledging both strengths and areas for improvement
-6. Keep review professional and constructive
+6. Keep review comment under 400 characters - be concise and professional
 
 Output format:
 {
   "rating": 3.7,
-  "comment": "Detailed review comment referencing specific evidence...",
+  "comment": "Concise review under 400 characters referencing specific evidence...",
   "highlights": ["specific observation 1", "specific observation 2", "specific observation 3"],
-  "reasoning": "Detailed explanation of rating based on analysis"
+  "reasoning": "Brief explanation of rating"
 }
 ''';
   }
 
-  // Parse enhanced AI response with comprehensive data
+  // Parse AI response for fast reviews
+  AiReviewSuggestion _parseAIResponse(String response) {
+    try {
+      final jsonStart = response.indexOf('{');
+      final jsonEnd = response.lastIndexOf('}') + 1;
+      
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
+        final jsonStr = response.substring(jsonStart, jsonEnd);
+        final data = jsonDecode(jsonStr);
+        
+        return AiReviewSuggestion(
+          suggestedRating: (data['rating'] ?? 3.0).toDouble(),
+          suggestedComment: data['comment'] ?? 'Review generated based on recent interactions.',
+          conversationHighlights: List<String>.from(data['highlights'] ?? []),
+          imageAnalysis: [], // Will be filled from context if available
+          analysisReasoning: data['reasoning'] ?? 'Analysis based on pre-processed conversation context.',
+        );
+      }
+    } catch (e) {
+      print('Error parsing AI response: $e');
+    }
+    
+    return AiReviewSuggestion(
+      suggestedRating: 3.0,
+      suggestedComment: response.length > 400 ? response.substring(0, 400) : response,
+      conversationHighlights: ['Communication analyzed from recent interactions'],
+      imageAnalysis: [],
+      analysisReasoning: 'Fast analysis completed with available data.',
+    );
+  }
+
+  // Parse enhanced AI response with comprehensive data (fallback)
   AiReviewSuggestion _parseEnhancedAIResponse(
     String response, 
     ConversationAnalysis conversationAnalysis,
@@ -162,12 +270,19 @@ Output format:
             .map((img) => img.description)
             .toList();
         
+        // Ensure comment is under 400 characters
+        String comment = data['comment'] ?? 'Review generated based on recent interactions.';
+        if (comment.length > 400) {
+          comment = comment.substring(0, 397) + '...';
+        }
+        
         return AiReviewSuggestion(
           suggestedRating: (data['rating'] ?? 3.0).toDouble(),
-          suggestedComment: data['comment'] ?? 'Review generated based on recent interactions.',
+          suggestedComment: comment,
           conversationHighlights: List<String>.from(data['highlights'] ?? conversationAnalysis.keyInsights),
           imageAnalysis: imageDescriptions,
           analysisReasoning: data['reasoning'] ?? 'Analysis based on conversation patterns and interactions.',
+          detailedImageAnalyses: conversationAnalysis.imageAnalyses, // Pass full ImageAnalysis objects for debug
         );
       }
     } catch (e) {
@@ -183,17 +298,23 @@ Output format:
         .map((img) => img.description)
         .toList();
     
+    String fallbackComment = response.isNotEmpty ? response : 'Review generated based on recent interactions.';
+    if (fallbackComment.length > 400) {
+      fallbackComment = fallbackComment.substring(0, 397) + '...';
+    }
+    
     return AiReviewSuggestion(
       suggestedRating: 3.0,
-      suggestedComment: response.isNotEmpty ? response : 'Review generated based on recent interactions.',
+      suggestedComment: fallbackComment,
       conversationHighlights: fallbackHighlights,
       imageAnalysis: fallbackImageAnalysis,
       analysisReasoning: 'Fallback analysis completed with available data.',
+      detailedImageAnalyses: conversationAnalysis.imageAnalyses, // Pass full ImageAnalysis objects for debug
     );
   }
 
-  // Call OpenAI API
-  Future<String> _callOpenAI(String prompt) async {
+  // Call OpenAI API with configurable token limit
+  Future<String> _callOpenAI(String prompt, {int maxTokens = 200}) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/chat/completions'),
       headers: {
@@ -201,11 +322,11 @@ Output format:
         'Content-Type': 'application/json',
       },
       body: jsonEncode({
-        'model': 'gpt-4',
+        'model': 'gpt-4o-mini', // Using faster, cheaper model for reviews
         'messages': [
           {'role': 'user', 'content': prompt}
         ],
-        'max_tokens': 500,
+        'max_tokens': maxTokens,
         'temperature': 0.7,
       }),
     );
@@ -217,8 +338,6 @@ Output format:
       throw Exception('OpenAI API error: ${response.statusCode}');
     }
   }
-
-
 }
 
  

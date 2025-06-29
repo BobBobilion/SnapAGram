@@ -6,6 +6,7 @@ import '../../services/app_service_manager.dart';
 import '../../services/auth_service.dart';
 import '../../models/story_model.dart';
 import '../../utils/app_theme.dart';
+import '../../providers/ui_provider.dart';
 
 class ShareStoryScreen extends ConsumerStatefulWidget {
   final String imagePath;
@@ -42,6 +43,12 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
       final isPublic = _selectedVisibility == 'public';
       final caption = _captionController.text.trim();
       
+      // Check if the image file exists
+      final imageFile = File(widget.imagePath);
+      if (!await imageFile.exists()) {
+        throw Exception('Image file not found. Please try taking a new photo.');
+      }
+      
       setState(() => _uploadStatus = 'Uploading image...');
       
       final serviceManager = ref.read(appServiceManagerProvider);
@@ -58,30 +65,53 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
       print('Story created with ID: $storyId');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isPublic ? 'Posted to public stories!' : 'Posted to friends only!',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        // Navigate back to main app
+        // Navigate back to main app first
         Navigator.popUntil(context, (route) => route.isFirst);
+        
+        // Trigger refresh of explore screen
+        triggerExploreRefresh(ref);
+        
+        // Show success message after navigation
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  isPublic ? 'Posted to public stories!' : 'Posted to friends only!',
+                ),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        });
       }
     } catch (e) {
-      setState(() {
-        _isPosting = false;
-        _uploadStatus = '';
-      });
+      print('Error posting story: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error posting: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        setState(() {
+          _isPosting = false;
+          _uploadStatus = '';
+        });
+        
+        // Use a delayed call to ensure the widget is still mounted
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error posting: $e'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        });
+      } else {
+        // Widget is not mounted, just reset state
+        setState(() {
+          _isPosting = false;
+          _uploadStatus = '';
+        });
       }
     }
   }
@@ -121,201 +151,201 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Image Preview
-          Container(
-            height: 200,
-            width: double.infinity,
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.file(
-                File(widget.imagePath),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.grey[300],
-                    child: const Center(
-                      child: Icon(
-                        Icons.image_not_supported,
-                        size: 48,
-                        color: Colors.grey,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Image Preview
+            Container(
+              height: 200,
+              width: double.infinity,
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(
+                  File(widget.imagePath),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: Icon(
+                          Icons.image_not_supported,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-          
-          // Caption Input
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Add a caption',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[800],
+            
+            // Caption Input
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _captionController,
-                  maxLines: 3,
-                  maxLength: 280,
-                  decoration: InputDecoration(
-                    hintText: 'What\'s on your mind?',
-                    hintStyle: GoogleFonts.poppins(
-                      color: Colors.grey[500],
-                      fontSize: 14,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: AppTheme.getColorShade(userModel, 600) ?? Colors.blue),
-                    ),
-                    contentPadding: const EdgeInsets.all(12),
-                  ),
-                  style: GoogleFonts.poppins(fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Visibility Options
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Who can see this?',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                
-                // Public Option
-                _buildVisibilityOption(
-                  value: 'public',
-                  title: 'Everyone',
-                  subtitle: 'Your story will be visible to all Snapagram users',
-                  icon: Icons.public,
-                  color: Colors.green,
-                ),
-                
-                const SizedBox(height: 12),
-                
-                // Friends Only Option
-                _buildVisibilityOption(
-                  value: 'friends',
-                  title: 'Friends Only',
-                  subtitle: 'Only your friends can see this story',
-                  icon: Icons.people,
-                  color: Colors.blue,
-                ),
-              ],
-            ),
-          ),
-          
-          const Spacer(),
-          
-          // Post Button
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.all(16),
-            child: ElevatedButton(
-              onPressed: _isPosting ? null : _postStory,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.getColorShade(userModel, 600),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
+                ],
               ),
-              child: _isPosting
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          _uploadStatus.isEmpty ? 'Posting...' : _uploadStatus,
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Text(
-                      _selectedVisibility == 'public' 
-                          ? 'Post to Everyone' 
-                          : 'Post to Friends',
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add a caption',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[800],
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _captionController,
+                    maxLines: 3,
+                    maxLength: 280,
+                    decoration: InputDecoration(
+                      hintText: 'What\'s on your mind?',
+                      hintStyle: GoogleFonts.poppins(
+                        color: Colors.grey[500],
+                        fontSize: 14,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.getColorShade(userModel, 600) ?? Colors.blue),
+                      ),
+                      contentPadding: const EdgeInsets.all(12),
+                    ),
+                    style: GoogleFonts.poppins(fontSize: 14),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            
+            const SizedBox(height: 20),
+            
+            // Visibility Options
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Who can see this?',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Public Option
+                  _buildVisibilityOption(
+                    value: 'public',
+                    title: 'Everyone',
+                    subtitle: 'Your story will be visible to all Snapagram users',
+                    icon: Icons.public,
+                    color: Colors.blue,
+                  ),
+                  
+                  const SizedBox(height: 12),
+                  
+                  // Friends Only Option
+                  _buildVisibilityOption(
+                    value: 'friends',
+                    title: 'Friends Only',
+                    subtitle: 'Only your friends can see this story',
+                    icon: Icons.people,
+                    color: Colors.green,
+                  ),
+                ],
+              ),
+            ),
+            
+            // Post Button
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.all(16),
+              child: ElevatedButton(
+                onPressed: _isPosting ? null : _postStory,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.getColorShade(userModel, 600),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 2,
+                ),
+                child: _isPosting
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            _uploadStatus.isEmpty ? 'Posting...' : _uploadStatus,
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        _selectedVisibility == 'public' 
+                            ? 'Post to Everyone' 
+                            : 'Post to Friends',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
