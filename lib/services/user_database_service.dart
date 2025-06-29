@@ -7,9 +7,31 @@ import '../models/enums.dart';
 import '../models/walker_profile.dart';
 import '../models/owner_profile.dart';
 import 'storage_service.dart';
+import 'review_service.dart';
 
 final userProfileProvider = StreamProvider.autoDispose.family<UserModel?, String>((ref, userId) {
   return UserDatabaseService.listenToUser(userId);
+});
+
+// Enhanced user profile provider that auto-updates review summaries
+final enhancedUserProfileProvider = StreamProvider.autoDispose.family<UserModel?, String>((ref, userId) async* {
+  print('🔄 [ENHANCED-PROFILE] Loading user profile with auto-review-update: $userId');
+  
+  // First, ensure review summary is up to date
+  try {
+    final reviewService = ref.read(reviewServiceProvider);
+    // Trigger review summary update in background (don't wait for it)
+    reviewService.forceRecalculateReviewSummary(userId).catchError((e) {
+      print('🔄 [ENHANCED-PROFILE] Background review update failed: $e');
+    });
+  } catch (e) {
+    print('🔄 [ENHANCED-PROFILE] Failed to trigger review update: $e');
+  }
+  
+  // Return the live stream of user data
+  await for (final user in UserDatabaseService.listenToUser(userId)) {
+    yield user;
+  }
 });
 
 class UserDatabaseService {

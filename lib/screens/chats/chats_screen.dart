@@ -301,177 +301,181 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
     
     final isAvatarUrlValid = avatarUrl != null && (Uri.tryParse(avatarUrl)?.host.isNotEmpty ?? false);
     
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: AppTheme.getColorShade(userModel, 50),
-      child: ListTile(
-        leading: Stack(
-          children: [
-            CircleAvatar(
-              backgroundColor: isGroup ? Colors.orange[100] : AppTheme.getColorShade(userModel, 100),
-              backgroundImage: isAvatarUrlValid
-                  ? NetworkImage(avatarUrl!)
-                  : null,
-              child: !isAvatarUrlValid
-                  ? Icon(
-                      isGroup ? Icons.group : Icons.person,
-                      color: isGroup ? Colors.orange[600] : AppTheme.getPrimaryColor(userModel),
-                    )
-                  : null,
-            ),
-            if (hasUnreadMessages)
-              Positioned(
-                right: 0,
-                top: 0,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      unreadCount > 9 ? '9+' : unreadCount.toString(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+    return Stack(
+      children: [
+        Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          color: AppTheme.getColorShade(userModel, 50),
+          child: ListTile(
+            leading: Stack(
+              children: [
+                CircleAvatar(
+                  backgroundColor: isGroup ? Colors.orange[100] : AppTheme.getColorShade(userModel, 100),
+                  backgroundImage: isAvatarUrlValid
+                      ? NetworkImage(avatarUrl!)
+                      : null,
+                  child: !isAvatarUrlValid
+                      ? Icon(
+                          isGroup ? Icons.group : Icons.person,
+                          color: isGroup ? Colors.orange[600] : AppTheme.getPrimaryColor(userModel),
+                        )
+                      : null,
+                ),
+                if (hasUnreadMessages)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          unreadCount > 9 ? '9+' : unreadCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            // Online/Offline status dot
-            if (!isGroup && otherUserId != null && otherUserId.isNotEmpty)
-              Positioned(
-                top: 0,
-                left: 0,
-                child: Consumer(
-                  builder: (context, ref, child) {
-                    final userAsync = ref.watch(userProfileProvider(otherUserId));
-                    return userAsync.when(
-                      data: (user) {
-                        final isOnline = user?.isOnline ?? false;
-                        return Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: isOnline ? Colors.green : Colors.red, // Online status
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+              ],
+            ),
+            title: isGroup
+                ? Text(
+                    displayName,
+                    style: GoogleFonts.poppins(
+                      fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
+                      fontSize: 16,
+                      color: hasUnreadMessages ? Colors.black : Colors.grey[800],
+                    ),
+                  )
+                : Consumer(
+                    builder: (context, ref, child) {
+                      if (otherUserId == null || otherUserId.isEmpty) {
+                        return Text(
+                          displayName, // Fallback to handle
+                          style: GoogleFonts.poppins(
+                            fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
+                            fontSize: 16,
+                            color: hasUnreadMessages ? Colors.black : Colors.grey[800],
                           ),
                         );
-                      },
-                      loading: () => const SizedBox.shrink(),
-                      error: (e, st) => const SizedBox.shrink(),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-        title: isGroup
-            ? Text(
-                displayName,
-                style: GoogleFonts.poppins(
-                  fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 16,
-                  color: hasUnreadMessages ? Colors.black : Colors.grey[800],
-                ),
-              )
-            : Consumer(
-                builder: (context, ref, child) {
-                  if (otherUserId == null || otherUserId.isEmpty) {
-                    return Text(
-                      displayName, // Fallback to handle
-                      style: GoogleFonts.poppins(
-                        fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
-                        fontSize: 16,
-                        color: hasUnreadMessages ? Colors.black : Colors.grey[800],
-                      ),
-                    );
-                  }
-                  final userAsync = ref.watch(userProfileProvider(otherUserId));
-                  return userAsync.when(
-                    data: (user) => Text(
-                      user?.displayName ?? displayName,
-                      style: GoogleFonts.poppins(
-                        fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
-                        fontSize: 16,
-                        color: hasUnreadMessages ? Colors.black : Colors.grey[800],
-                      ),
-                    ),
-                    loading: () => Text(
-                      displayName, // Show handle while loading
-                      style: GoogleFonts.poppins(
-                        fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
-                        fontSize: 16,
-                        color: hasUnreadMessages ? Colors.black : Colors.grey[800],
-                      ),
-                    ),
-                    error: (e, st) => Text(
-                      displayName, // Show handle on error
-                      style: GoogleFonts.poppins(
-                        fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
-                        fontSize: 16,
-                        color: hasUnreadMessages ? Colors.black : Colors.grey[800],
-                      ),
-                    ),
-                  );
-                },
-              ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              chat.lastMessageContent ?? 'No messages yet',
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: hasUnreadMessages ? Colors.grey[800] : Colors.grey[600],
-                fontWeight: hasUnreadMessages ? FontWeight.w500 : FontWeight.w400,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Row(
+                      }
+                      final userAsync = ref.watch(enhancedUserProfileProvider(otherUserId));
+                      return userAsync.when(
+                        data: (user) => Text(
+                          user?.displayName ?? displayName,
+                          style: GoogleFonts.poppins(
+                            fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
+                            fontSize: 16,
+                            color: hasUnreadMessages ? Colors.black : Colors.grey[800],
+                          ),
+                        ),
+                        loading: () => Text(
+                          displayName, // Show handle while loading
+                          style: GoogleFonts.poppins(
+                            fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
+                            fontSize: 16,
+                            color: hasUnreadMessages ? Colors.black : Colors.grey[800],
+                          ),
+                        ),
+                        error: (e, st) => Text(
+                          displayName, // Show handle on error
+                          style: GoogleFonts.poppins(
+                            fontWeight: hasUnreadMessages ? FontWeight.w600 : FontWeight.w500,
+                            fontSize: 16,
+                            color: hasUnreadMessages ? Colors.black : Colors.grey[800],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (chat.isEncrypted) ...[
-                  Icon(
-                    Icons.lock,
-                    size: 12,
-                    color: Colors.grey[500],
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'E2EE',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      color: Colors.grey[500],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
                 Text(
-                  lastMessageTime != null ? _formatTime(lastMessageTime) : '',
+                  chat.lastMessageContent ?? 'No messages yet',
                   style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: Colors.grey[500],
+                    fontSize: 14,
+                    color: hasUnreadMessages ? Colors.grey[800] : Colors.grey[600],
+                    fontWeight: hasUnreadMessages ? FontWeight.w500 : FontWeight.w400,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    if (chat.isEncrypted) ...[
+                      Icon(
+                        Icons.lock,
+                        size: 12,
+                        color: Colors.grey[500],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'E2EE',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.grey[500],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Text(
+                      lastMessageTime != null ? _formatTime(lastMessageTime) : '',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+            onTap: () async => await _openChat(chat),
+            onLongPress: () => _showChatOptions(context, chat),
+          ),
         ),
-        onTap: () async => await _openChat(chat),
-        onLongPress: () => _showChatOptions(context, chat),
-      ),
+        // Online/Offline status dot positioned at top left of the card
+        if (!isGroup && otherUserId != null && otherUserId.isNotEmpty)
+          Positioned(
+            top: 8,
+            left: 8,
+            child: Consumer(
+              builder: (context, ref, child) {
+                final userAsync = ref.watch(enhancedUserProfileProvider(otherUserId));
+                return userAsync.when(
+                  data: (user) {
+                    final isOnline = user?.isOnline ?? false;
+                    return Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: isOnline ? Colors.green : Colors.red, // Online status
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (e, st) => const SizedBox.shrink(),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 

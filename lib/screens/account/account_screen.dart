@@ -133,7 +133,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
       ),
       color: AppTheme.getColorShade(userModel, 50),
       child: Stack(
@@ -197,7 +197,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                           ),
                           decoration: BoxDecoration(
                             color: AppTheme.getColorShade(userModel, 100),
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             userModel?.roleText ?? 'User',
@@ -217,7 +217,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                             ),
                             decoration: BoxDecoration(
                               color: Colors.purple[100],
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
                               userModel?.isOwner == true 
@@ -358,7 +358,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.grey[200]!),
       ),
       child: Column(
@@ -441,7 +441,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: Colors.grey[300]!, width: 1),
                   ),
                   child: Padding(
@@ -558,7 +558,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.grey[200]!),
       ),
       child: Column(
@@ -622,7 +622,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: Colors.grey[200]!),
               ),
               child: Text(
@@ -866,12 +866,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: InkWell(
         onTap: title == 'Connections' ? _navigateToFriendsTab : 
                title == 'Stories' ? _navigateToMyStories : null,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -1093,7 +1093,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: ListTile(
         leading: Icon(
@@ -1130,7 +1130,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: ListTile(
         leading: Icon(

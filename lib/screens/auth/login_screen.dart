@@ -84,8 +84,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final authService = ref.read(authServiceProvider);
       final result = await authService.signInWithGoogle();
       
-      // Check if sign-in was successful
-      if (result != null && result.user != null) {
+      // Check if sign-in was successful - either result is not null or user is authenticated
+      final isSignedIn = (result != null && result.user != null) || 
+                        authService.isAuthenticated;
+      
+      if (isSignedIn) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

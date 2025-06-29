@@ -433,11 +433,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     return ListView.builder(
       controller: scrollController,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-      itemCount: sortedStories.length + 1,
+      itemCount: sortedStories.length,
       itemBuilder: (context, index) {
-        if (index == sortedStories.length) {
-          return _buildRefreshButton(storyType, userModel);
-        }
         return _buildStoryCard(sortedStories[index], storyType, userModel);
       },
     );
@@ -462,7 +459,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: cardColor.withOpacity(0.5), width: 1),
       ),
       child: Column(
@@ -502,7 +499,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: Colors.black54,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           'Viewed',
@@ -524,7 +521,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: Colors.blue.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           'Auto-viewed',
@@ -1356,213 +1353,6 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     );
   }
 
-  Widget _buildRefreshButton(String storyType, userModel) {
-    final isPublic = storyType == 'public';
-    final isLoading = isPublic ? _isLoadingPublic : _isLoadingFriends;
-    final themeColor =
-        isPublic ? AppTheme.getColorShade(userModel, 600) : Colors.green[600];
-    final themeLightColor =
-        isPublic ? AppTheme.getColorShade(userModel, 300) : Colors.green[300];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 20, horizontal: 32),
-      child: Column(
-        children: [
-          Container(
-            height: 1,
-            color: Colors.grey[300],
-            margin: const EdgeInsets.only(bottom: 20),
-          ),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: isLoading
-                  ? null
-                  : () {
-                      if (isPublic) {
-                        _refreshPublicStories();
-                      } else {
-                        _refreshFriendsStories();
-                      }
-                    },
-              icon: isLoading
-                  ? SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.grey[400]!,
-                        ),
-                      ),
-                    )
-                  : Icon(
-                      Icons.refresh,
-                      color: themeColor,
-                    ),
-              label: Text(
-                isLoading
-                    ? 'Refreshing...'
-                    : 'Refresh ${isPublic ? "Public" : "Friends"} Stories',
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: isLoading ? Colors.grey[500] : themeColor,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: themeColor,
-                elevation: 2,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(
-                    color: themeLightColor ?? Colors.grey,
-                    width: 1,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'You\'ve reached the end!',
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Colors.grey[500],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Pull down or tap refresh to see new stories',
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              color: Colors.grey[400],
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStoryMedia(StoryModel story, userModel) {
-    if (story.type == StoryType.image) {
-      if (story.mediaUrl.startsWith('http')) {
-        return Image.network(
-          story.mediaUrl,
-          height: 300,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return _buildMediaPlaceholder(story);
-          },
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return _buildLoadingPlaceholder();
-          },
-        );
-      } else {
-        return Image.file(
-          File(story.mediaUrl),
-          height: 300,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return _buildMediaPlaceholder(story);
-          },
-        );
-      }
-    } else if (story.type == StoryType.video) {
-      return _VideoStoryPlayer(story: story, userModel: userModel);
-    } else {
-      return _buildMediaPlaceholder(story);
-    }
-  }
-
-  Widget _buildMediaPlaceholder(StoryModel story) {
-    return Container(
-      height: 300,
-      width: double.infinity,
-      color: Colors.grey[200],
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            story.type == StoryType.image ? Icons.image : Icons.videocam,
-            size: 48,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            story.type == StoryType.image ? 'Image Story' : 'Video Story',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          if (story.caption != null && story.caption!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                story.caption!,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingPlaceholder() {
-    return Container(
-      height: 300,
-      width: double.infinity,
-      color: Colors.grey[200],
-      child: const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-  }
-
-  void _cleanupStoryKeys() {
-    // Remove keys for stories that are no longer in the lists
-    final currentStoryIds = <String>{};
-    currentStoryIds.addAll(_publicStories.map((s) => s.id));
-    currentStoryIds.addAll(_friendsStories.map((s) => s.id));
-    
-    _storyKeys.removeWhere((key, value) => !currentStoryIds.contains(key));
-    
-    // Clean up animation states for stories that are no longer in the lists
-    _heartAnimations.removeWhere((key, value) => !currentStoryIds.contains(key));
-    _doubleTapStories.removeWhere((storyId) => !currentStoryIds.contains(storyId));
-    
-    // Clean up user cache for users that are no longer in the stories
-    final currentUserIds = <String>{};
-    currentUserIds.addAll(_publicStories.map((s) => s.uid));
-    currentUserIds.addAll(_friendsStories.map((s) => s.uid));
-    
-    _userCache.removeWhere((key, value) {
-      // Extract user ID from cache key (format: "userId_with_review")
-      final userId = key.split('_with_review')[0];
-      return !currentUserIds.contains(userId);
-    });
-    
-    // Clean up cached futures for users that are no longer in the stories
-    _userDataFutures.removeWhere((userId, future) => !currentUserIds.contains(userId));
-  }
-
   void _handleDoubleTapLike(StoryModel story) {
     if (_doubleTapStories.contains(story.id)) {
       return;
@@ -1615,23 +1405,6 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       setState(() {
         // This will trigger rebuild of all story cards
       });
-    }
-  }
-
-  Future<void> _refreshUserDataOnly() async {
-    print('Refreshing user data only');
-    _clearUserCache();
-    if (mounted) {
-      setState(() {
-        // This will trigger rebuild of all story cards with fresh user data
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Refreshed user ratings'),
-          backgroundColor: Colors.blue,
-          duration: Duration(milliseconds: 1500),
-        ),
-      );
     }
   }
 
@@ -1916,6 +1689,138 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     }
     
     return bestScore;
+  }
+
+  Widget _buildStoryMedia(StoryModel story, userModel) {
+    if (story.type == StoryType.image) {
+      if (story.mediaUrl.startsWith('http')) {
+        return Image.network(
+          story.mediaUrl,
+          height: 300,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildMediaPlaceholder(story);
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return _buildLoadingPlaceholder();
+          },
+        );
+      } else {
+        return Image.file(
+          File(story.mediaUrl),
+          height: 300,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildMediaPlaceholder(story);
+          },
+        );
+      }
+    } else if (story.type == StoryType.video) {
+      return _VideoStoryPlayer(story: story, userModel: userModel);
+    } else {
+      return _buildMediaPlaceholder(story);
+    }
+  }
+
+  Widget _buildMediaPlaceholder(StoryModel story) {
+    return Container(
+      height: 300,
+      width: double.infinity,
+      color: Colors.grey[200],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            story.type == StoryType.image ? Icons.image : Icons.videocam,
+            size: 48,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            story.type == StoryType.image ? 'Image Story' : 'Video Story',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (story.caption != null && story.caption!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                story.caption!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[500],
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingPlaceholder() {
+    return Container(
+      height: 300,
+      width: double.infinity,
+      color: Colors.grey[200],
+      child: const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+
+  void _cleanupStoryKeys() {
+    // Remove keys for stories that are no longer in the lists
+    final currentStoryIds = <String>{};
+    currentStoryIds.addAll(_publicStories.map((s) => s.id));
+    currentStoryIds.addAll(_friendsStories.map((s) => s.id));
+    
+    _storyKeys.removeWhere((key, value) => !currentStoryIds.contains(key));
+    
+    // Clean up animation states for stories that are no longer in the lists
+    _heartAnimations.removeWhere((key, value) => !currentStoryIds.contains(key));
+    _doubleTapStories.removeWhere((storyId) => !currentStoryIds.contains(storyId));
+    
+    // Clean up user cache for users that are no longer in the stories
+    final currentUserIds = <String>{};
+    currentUserIds.addAll(_publicStories.map((s) => s.uid));
+    currentUserIds.addAll(_friendsStories.map((s) => s.uid));
+    
+    _userCache.removeWhere((key, value) {
+      // Extract user ID from cache key (format: "userId_with_review")
+      final userId = key.split('_with_review')[0];
+      return !currentUserIds.contains(userId);
+    });
+    
+    // Clean up cached futures for users that are no longer in the stories
+    _userDataFutures.removeWhere((userId, future) => !currentUserIds.contains(userId));
+  }
+
+  Future<void> _refreshUserDataOnly() async {
+    print('Refreshing user data only');
+    _clearUserCache();
+    if (mounted) {
+      setState(() {
+        // This will trigger rebuild of all story cards with fresh user data
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Refreshed user ratings'),
+          backgroundColor: Colors.blue,
+          duration: Duration(milliseconds: 1500),
+        ),
+      );
+    }
   }
 }
 

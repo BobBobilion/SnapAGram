@@ -70,7 +70,6 @@ class AiReviewService {
         suggestedRating: 3.0,
         suggestedComment: 'Had a good experience overall.',
         conversationHighlights: [],
-        imageAnalysis: [],
         analysisReasoning: 'Unable to analyze conversation data.',
       );
     }
@@ -234,7 +233,6 @@ Output format:
           suggestedRating: (data['rating'] ?? 3.0).toDouble(),
           suggestedComment: data['comment'] ?? 'Review generated based on recent interactions.',
           conversationHighlights: List<String>.from(data['highlights'] ?? []),
-          imageAnalysis: [], // Will be filled from context if available
           analysisReasoning: data['reasoning'] ?? 'Analysis based on pre-processed conversation context.',
         );
       }
@@ -246,7 +244,6 @@ Output format:
       suggestedRating: 3.0,
       suggestedComment: response.length > 400 ? response.substring(0, 400) : response,
       conversationHighlights: ['Communication analyzed from recent interactions'],
-      imageAnalysis: [],
       analysisReasoning: 'Fast analysis completed with available data.',
     );
   }
@@ -265,11 +262,6 @@ Output format:
         final jsonStr = response.substring(jsonStart, jsonEnd);
         final data = jsonDecode(jsonStr);
         
-        // Extract image descriptions for highlights
-        final imageDescriptions = conversationAnalysis.imageAnalyses
-            .map((img) => img.description)
-            .toList();
-        
         // Ensure comment is under 400 characters
         String comment = data['comment'] ?? 'Review generated based on recent interactions.';
         if (comment.length > 400) {
@@ -280,9 +272,7 @@ Output format:
           suggestedRating: (data['rating'] ?? 3.0).toDouble(),
           suggestedComment: comment,
           conversationHighlights: List<String>.from(data['highlights'] ?? conversationAnalysis.keyInsights),
-          imageAnalysis: imageDescriptions,
           analysisReasoning: data['reasoning'] ?? 'Analysis based on conversation patterns and interactions.',
-          detailedImageAnalyses: conversationAnalysis.imageAnalyses, // Pass full ImageAnalysis objects for debug
         );
       }
     } catch (e) {
@@ -293,10 +283,6 @@ Output format:
     final fallbackHighlights = conversationAnalysis.keyInsights.isNotEmpty 
         ? conversationAnalysis.keyInsights
         : ['Communication analyzed from recent interactions'];
-        
-    final fallbackImageAnalysis = conversationAnalysis.imageAnalyses
-        .map((img) => img.description)
-        .toList();
     
     String fallbackComment = response.isNotEmpty ? response : 'Review generated based on recent interactions.';
     if (fallbackComment.length > 400) {
@@ -307,9 +293,7 @@ Output format:
       suggestedRating: 3.0,
       suggestedComment: fallbackComment,
       conversationHighlights: fallbackHighlights,
-      imageAnalysis: fallbackImageAnalysis,
       analysisReasoning: 'Fallback analysis completed with available data.',
-      detailedImageAnalyses: conversationAnalysis.imageAnalyses, // Pass full ImageAnalysis objects for debug
     );
   }
 

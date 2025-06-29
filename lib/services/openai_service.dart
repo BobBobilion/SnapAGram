@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -541,5 +542,194 @@ Do not offer advice or opinions. Simply describe what you see in a structured, c
     }
     
     return false;
+  }
+
+  /// Generate a caption for a photo using AI with user context
+  Future<String?> generatePhotoCaption(String imagePath, {UserModel? user}) async {
+    try {
+      // Convert local file path to base64 for API call
+      final imageFile = File(imagePath);
+      if (!await imageFile.exists()) {
+        throw Exception('Image file not found');
+      }
+
+      final imageBytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(imageBytes);
+      final imageUrl = 'data:image/jpeg;base64,$base64Image';
+
+      // Build contextual prompt based on user role
+      String contextualPrompt = _buildContextualCaptionPrompt(user);
+
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
+        body: jsonEncode({
+          'model': 'gpt-4o',
+          'messages': [
+            {
+              'role': 'system',
+              'content': contextualPrompt,
+            },
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'text',
+                  'text': 'Generate a compelling social media caption for this photo:'
+                },
+                {
+                  'type': 'image_url',
+                  'image_url': {
+                    'url': imageUrl,
+                  }
+                }
+              ]
+            }
+          ],
+          'max_tokens': 100,
+          'temperature': 0.8,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final caption = data['choices'][0]['message']['content'] as String?;
+        return caption?.trim();
+      } else {
+        print('OpenAI Caption Generation Error: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error generating photo caption: $e');
+      return null;
+    }
+  }
+
+  /// Build contextual prompt based on user role and profile
+  String _buildContextualCaptionPrompt(UserModel? user) {
+    if (user == null) {
+      return '''You are a creative social media caption generator. Generate engaging, natural captions for photos that people would want to post on social media. 
+
+Guidelines:
+- Keep it under 150 characters
+- Make it engaging and authentic 
+- Include relevant emojis where appropriate
+- Avoid being too generic - be specific to what you see
+- Match the mood/vibe of the image
+- Don't mention technical details about the photo itself
+
+Return only the caption text, nothing else.''';
+    }
+
+    final isWalker = user.isWalker;
+    final userName = user.displayName.split(' ').first;
+    final userRole = isWalker ? 'dog walker' : 'dog owner';
+    
+    String contextualGuidelines = '';
+    
+    if (isWalker) {
+      // Dog walker context
+      final walkerProfile = user.walkerProfile;
+      String walkerContext = '';
+      
+      if (walkerProfile != null) {
+        final rating = walkerProfile.averageRating;
+        final totalReviews = walkerProfile.totalReviews;
+        final city = walkerProfile.city;
+        final recentWalks = walkerProfile.recentWalks;
+        
+        walkerContext = '''
+WALKER PROFILE:
+- City: $city
+- Rating: ${rating > 0 ? '$rating/5 (${totalReviews} reviews)' : 'No reviews yet'}
+- Recent walks: ${recentWalks.length} completed
+
+IMPORTANT: If you see a dog in the photo, this is likely a dog ${recentWalks.isNotEmpty ? 'from a recent walk' : 'they are walking'}. Focus on the professional care and service aspect.
+''';
+      }
+      
+      contextualGuidelines = '''
+You are helping ${userName}, a professional dog walker, create engaging social media captions for their dog walking business.
+
+CONTEXT:
+- User: ${userName} (Professional Dog Walker)
+- Platform: Snapagram (dog walking social app)
+- Audience: Other dog owners and walkers
+- Purpose: Showcase professional dog walking services and care
+
+$walkerContext
+
+GUIDELINES:
+- Keep it under 150 characters
+- Make it engaging and authentic 
+- Include relevant emojis where appropriate
+- Focus on dog care, walking, and professional service
+- If you see a dog, mention the activity (walking, playing, training)
+- Highlight the quality of care and attention to detail
+- Use a professional but friendly tone
+- Don't mention technical details about the photo itself
+
+EXAMPLES:
+- "Another happy pup enjoying their afternoon walk! 🐕‍🦺"
+- "Quality time with this sweetheart during our walk 🐕"
+- "Professional care, happy dogs! 🐾"
+
+Return only the caption text, nothing else.''';
+    } else {
+      // Dog owner context - include dog information
+      final ownerProfile = user.ownerProfile;
+      String dogContext = '';
+      
+      if (ownerProfile != null) {
+        final dogName = ownerProfile.dogName;
+        final dogBreed = ownerProfile.dogBreed;
+        final dogAge = ownerProfile.dogAge;
+        final dogSize = ownerProfile.dogSizeText;
+        
+        dogContext = '''
+DOG INFORMATION:
+- Dog's Name: ${dogName.isNotEmpty ? dogName : 'Not specified'}
+- Breed: ${dogBreed ?? 'Not specified'}
+- Age: ${dogAge != null ? '${dogAge} years old' : 'Not specified'}
+- Size: $dogSize
+
+IMPORTANT: If you see a dog in the photo and the dog's name is provided (${dogName.isNotEmpty ? dogName : 'not available'}), use the dog's name in the caption to make it personal. If no name is available, use "my pup" or "my dog".
+''';
+      }
+      
+      contextualGuidelines = '''
+You are helping ${userName}, a dog owner, create engaging social media captions for their personal dog photos.
+
+CONTEXT:
+- User: ${userName} (Dog Owner)
+- Platform: Snapagram (dog walking social app)
+- Audience: Other dog owners and walkers
+- Purpose: Share personal moments with their dog
+
+$dogContext
+
+GUIDELINES:
+- Keep it under 150 characters
+- Make it engaging and authentic 
+- Include relevant emojis where appropriate
+- Focus on the personal bond and relationship with the dog
+- If you see a dog, make it personal and emotional
+- Use the dog's name if provided and if it seems like a personal pet
+- Show love and care for the dog
+- Use a warm, personal tone
+- Don't mention technical details about the photo itself
+
+EXAMPLES:
+${ownerProfile?.dogName.isNotEmpty == true ? '- "${ownerProfile!.dogName} and I enjoying the sunshine! ☀️🐕"' : '- "My best friend and I enjoying the sunshine! ☀️🐕"'}
+- "Nothing beats quality time with my pup 🐾"
+- "This little one always knows how to make me smile 😊"
+
+Return only the caption text, nothing else.''';
+    }
+
+    return contextualGuidelines;
   }
 } 

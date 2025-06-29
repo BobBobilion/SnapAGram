@@ -20,9 +20,49 @@ class PublicProfileScreen extends ConsumerWidget {
 
   const PublicProfileScreen({super.key, required this.userId});
 
+  Future<void> _refreshProfile(WidgetRef ref, String userId) async {
+    print('🔄 [PROFILE] Refreshing profile data with aggressive cache clearing...');
+    
+    try {
+      final reviewService = ref.read(reviewServiceProvider);
+      
+      // Step 1: Force complete recalculation of review summary
+      print('🔄 [PROFILE] Forcing review summary recalculation...');
+      await reviewService.forceRecalculateReviewSummary(userId);
+      
+      // Step 2: Run diagnostic to verify data is current
+      await reviewService.diagnoseReviewSubmission(userId);
+      
+      // Step 3: Clear all providers aggressively
+      print('🔄 [PROFILE] Invalidating all providers...');
+      ref.invalidate(userProfileProvider(userId));
+      ref.invalidate(enhancedUserProfileProvider(userId));
+      ref.invalidate(reviewServiceProvider);
+      
+      // Step 4: Wait for database propagation
+      await Future.delayed(const Duration(milliseconds: 1200));
+      
+      // Step 5: Force another provider refresh
+      ref.invalidate(userProfileProvider(userId));
+      ref.invalidate(enhancedUserProfileProvider(userId));
+      ref.invalidate(reviewServiceProvider);
+      
+      // Step 6: Final delay for UI updates
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      print('🔄 [PROFILE] Aggressive refresh completed');
+    } catch (e) {
+      print('🔄 [PROFILE] Refresh error: $e');
+      // Even if there's an error, still try to refresh providers
+      ref.invalidate(userProfileProvider(userId));
+      ref.invalidate(enhancedUserProfileProvider(userId));
+      ref.invalidate(reviewServiceProvider);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final userProfileStream = ref.watch(userProfileProvider(userId));
+    final userProfileStream = ref.watch(enhancedUserProfileProvider(userId));
     final authService = ref.watch(authServiceProvider);
     final currentUser = authService.userModel;
 
@@ -43,6 +83,11 @@ class PublicProfileScreen extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 1,
         actions: [
+          IconButton(
+            onPressed: () => _refreshProfile(ref, userId),
+            icon: Icon(Icons.refresh, color: Colors.grey[600]),
+            tooltip: 'Refresh profile',
+          ),
           if (currentUser != null && currentUser.uid != userId)
             _buildFriendshipButton(context, ref, currentUser, userId),
         ],
@@ -53,17 +98,21 @@ class PublicProfileScreen extends ConsumerWidget {
             if (userModel == null) {
               return const Center(child: Text('User not found.'));
             }
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildProfileCard(context, userModel),
-                  const SizedBox(height: 24),
-                  _buildQuickStats(context, userModel),
-                  const SizedBox(height: 24),
-                  _buildReviewsSection(context, ref, userModel, currentUser),
-                ],
+            return RefreshIndicator(
+              onRefresh: () => _refreshProfile(ref, userModel.uid),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildProfileCard(context, userModel),
+                    const SizedBox(height: 24),
+                    _buildQuickStats(context, userModel),
+                    const SizedBox(height: 24),
+                    _buildReviewsSection(context, ref, userModel, currentUser),
+                  ],
+                ),
               ),
             );
           },
@@ -151,7 +200,7 @@ class PublicProfileScreen extends ConsumerWidget {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -299,11 +348,11 @@ class PublicProfileScreen extends ConsumerWidget {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -357,7 +406,7 @@ class PublicProfileScreen extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.grey[200]!),
       ),
       child: Column(
@@ -440,7 +489,7 @@ class PublicProfileScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: Colors.grey[300]!, width: 1),
                   ),
                   child: Padding(
@@ -556,7 +605,7 @@ class PublicProfileScreen extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.grey[200]!),
       ),
       child: Column(
@@ -620,7 +669,7 @@ class PublicProfileScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: Colors.grey[200]!),
               ),
               child: Text(
@@ -810,22 +859,26 @@ class PublicProfileScreen extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 16),
-            // Reviews List
+            // Reviews List with Refresh Capability
             Container(
               constraints: const BoxConstraints(maxHeight: 400),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: Colors.grey[200]!),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: ReviewsListWidget(
-                  userId: userModel.uid,
-                  showUserInfo: true,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  currentUserId: currentUser?.uid,
-                ),
+                borderRadius: BorderRadius.circular(6),
+                                  child: RefreshIndicator(
+                    onRefresh: () => _refreshProfile(ref, userModel.uid),
+                    child: ReviewsListWidget(
+                      key: ValueKey('reviews_${userModel.uid}'),
+                      userId: userModel.uid,
+                      showUserInfo: true,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      currentUserId: currentUser?.uid,
+                    ),
+                  ),
               ),
             ),
           ],
@@ -840,7 +893,7 @@ class PublicProfileScreen extends ConsumerWidget {
         return Card(
           elevation: 2,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -915,7 +968,7 @@ class PublicProfileScreen extends ConsumerWidget {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -971,7 +1024,7 @@ class PublicProfileScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: Colors.grey[200]!),
               ),
               child: Column(
@@ -1023,26 +1076,90 @@ class PublicProfileScreen extends ConsumerWidget {
     );
     
     if (result == true) {
-      print('🎯 [PROFILE] Review submitted successfully, forcing refresh...');
+      print('🎯 [PROFILE] Review submitted successfully, auto-refreshing...');
       
-      // Force refresh of the review service provider to ensure streams update
+      // Show loading indicator during refresh
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text('Refreshing reviews...'),
+              ],
+            ),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green[600],
+          ),
+        );
+      }
+      
+      // Enhanced refresh with multiple attempts
+      await _performReviewRefresh(ref, targetUser.uid);
+      
+      // Show completion message
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('Review submitted and profile updated!'),
+              ],
+            ),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green[600],
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _performReviewRefresh(WidgetRef ref, String userId) async {
+    print('🔄 [PROFILE] Performing enhanced review refresh...');
+    
+    try {
+      final reviewService = ref.read(reviewServiceProvider);
+      
+      // Force immediate recalculation of review summary
+      print('🔄 [PROFILE] Force recalculating review summary...');
+      await reviewService.forceRecalculateReviewSummary(userId);
+      
+      // Wait for database write propagation
+      await Future.delayed(const Duration(milliseconds: 1000));
+      
+      // Invalidate all providers to force fresh streams
       ref.invalidate(reviewServiceProvider);
+      ref.invalidate(userProfileProvider(userId));
+      ref.invalidate(enhancedUserProfileProvider(userId));
       
-      // Also invalidate the user profile provider to refresh all data
-      ref.invalidate(userProfileProvider(targetUser.uid));
-      
-      print('🎯 [PROFILE] Providers invalidated, UI should refresh');
-      
-      // Add a small delay to ensure Firestore has propagated the changes
+      // Additional delay for UI refresh
       await Future.delayed(const Duration(milliseconds: 500));
       
-      // Force another refresh just to be sure
+      // Second invalidation to ensure everything is fresh
       ref.invalidate(reviewServiceProvider);
+      ref.invalidate(userProfileProvider(userId));
+      ref.invalidate(enhancedUserProfileProvider(userId));
       
-      print('🎯 [PROFILE] Secondary refresh completed');
+      // Run diagnostic to verify the data is now correct
+      await reviewService.diagnoseReviewSubmission(userId);
       
-      // Run diagnostic to verify the review was properly saved
-      await ref.read(reviewServiceProvider).diagnoseReviewSubmission(targetUser.uid);
+      print('🔄 [PROFILE] Enhanced review refresh completed successfully');
+    } catch (e) {
+      print('🔄 [PROFILE] Enhanced refresh error: $e');
+      // Fallback to basic invalidation
+      ref.invalidate(reviewServiceProvider);
+      ref.invalidate(userProfileProvider(userId));
+      ref.invalidate(enhancedUserProfileProvider(userId));
     }
   }
 }

@@ -351,6 +351,13 @@ class ReviewService {
     return currentUserId == review.reviewerId;
   }
 
+  // Public method to force recalculation of review summary
+  Future<void> forceRecalculateReviewSummary(String userId) async {
+    print('🔄 [FORCE-RECALC] Forcing review summary recalculation for user: $userId');
+    await _updateUserReviewSummary(userId);
+    print('🔄 [FORCE-RECALC] Review summary recalculation completed');
+  }
+
   // Diagnostic method to verify review submission
   Future<void> diagnoseReviewSubmission(String targetUserId) async {
     try {

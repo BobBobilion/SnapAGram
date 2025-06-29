@@ -148,6 +148,40 @@ class AuthService extends ChangeNotifier {
       throw _handleAuthException(e);
     } catch (e) {
       print('Exception in Google Sign-In: $e');
+      
+      // Handle the specific PigeonUserDetails casting error
+      if (e.toString().contains('PigeonUserDetails') || 
+          e.toString().contains('List<Object?>') || 
+          e.toString().contains('type cast')) {
+        print('Detected PigeonUserDetails casting error - attempting workaround');
+        
+        // Try to get the current user if authentication succeeded despite the error
+        final currentUser = auth.currentUser;
+        if (currentUser != null) {
+          print('User is authenticated despite error - proceeding with user setup');
+          
+          final userService = _ref.read(userServiceProvider);
+          _userModel = await userService.getUserById(currentUser.uid);
+
+          if (_userModel == null) {
+            final displayName = currentUser.displayName ?? 'User';
+            await userService.createUserProfile(
+              uid: currentUser.uid,
+              email: currentUser.email ?? '',
+              displayName: displayName,
+              profilePictureUrl: currentUser.photoURL,
+            );
+            _userModel = await userService.getUserById(currentUser.uid);
+          }
+          
+          // Authentication was successful despite the error, return null to indicate success
+          // The caller should check if the user is authenticated using auth.currentUser
+          return null;
+        } else {
+          throw Exception('Authentication failed due to a plugin compatibility issue. Please try again or update the app.');
+        }
+      }
+      
       if (e.toString().contains('cancelled')) {
         throw Exception('Sign-in was cancelled');
       }

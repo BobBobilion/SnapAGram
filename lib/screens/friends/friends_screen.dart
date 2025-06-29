@@ -500,17 +500,17 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   }
 
   Widget _buildFriendCard(UserModel friend, UserModel? userModel) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: AppTheme.getColorShade(userModel, 50),
-      child: ListTile(
-        leading: Stack(
-          children: [
-            CircleAvatar(
+    return Stack(
+      children: [
+        Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          color: AppTheme.getColorShade(userModel, 50),
+          child: ListTile(
+            leading: CircleAvatar(
               backgroundColor: AppTheme.getColorShade(userModel, 100),
               backgroundImage: friend.profilePictureUrl != null && friend.profilePictureUrl!.isNotEmpty
                   ? NetworkImage(friend.profilePictureUrl!)
@@ -527,68 +527,68 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                     )
                   : null,
             ),
-            // Online/Offline status dot
-            Positioned(
-              top: 0,
-              left: 0,
-              child: Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: friend.isOnline ? Colors.green : Colors.red,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-              ),
-            ),
-          ],
-        ),
-        title: Text(
-          friend.displayName,
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              friend.handle.startsWith('@') ? friend.handle : '@${friend.handle}',
+            title: Text(
+              friend.displayName,
               style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: Colors.grey[600],
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
               ),
             ),
-            if (friend.bio != null && friend.bio!.isNotEmpty)
-              Text(
-                friend.bio!,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey[500],
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  friend.handle.startsWith('@') ? friend.handle : '@${friend.handle}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                if (friend.bio != null && friend.bio!.isNotEmpty)
+                  Text(
+                    friend.bio!,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey[500],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+            trailing: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.getColorShade(userModel, 600),
+                shape: BoxShape.circle,
               ),
-          ],
-        ),
-        trailing: Container(
-          decoration: BoxDecoration(
-            color: AppTheme.getColorShade(userModel, 600),
-            shape: BoxShape.circle,
+              child: IconButton(
+                icon: const Icon(Icons.message, color: Colors.white, size: 20),
+                onPressed: () => _startChatWithFriend(friend),
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                ),
+              ),
+            ),
+            onTap: () => _showFriendProfile(friend),
           ),
-          child: IconButton(
-            icon: const Icon(Icons.message, color: Colors.white, size: 20),
-            onPressed: () => _startChatWithFriend(friend),
-            padding: const EdgeInsets.all(8),
-            constraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
+        ),
+        // Online/Offline status dot positioned at top left of the card
+        Positioned(
+          top: 8,
+          left: 8,
+          child: Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: friend.isOnline ? Colors.green : Colors.red,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
             ),
           ),
         ),
-        onTap: () => _showFriendProfile(friend),
-      ),
+      ],
     );
   }
 
