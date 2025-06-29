@@ -547,6 +547,44 @@ Do not offer advice or opinions. Simply describe what you see in a structured, c
   /// Generate a caption for a photo using AI with user context
   Future<String?> generatePhotoCaption(String imagePath, {UserModel? user}) async {
     try {
+      // Debug: Log user context
+      print('🐕 CAPTION GENERATION DEBUG START');
+      print('📸 Image path: $imagePath');
+      
+      if (user != null) {
+        print('👤 User: ${user.displayName} (${user.uid})');
+        print('🎭 Role: ${user.isWalker ? 'Dog Walker' : 'Dog Owner'}');
+        
+        if (user.isWalker) {
+          final walkerProfile = user.walkerProfile;
+          if (walkerProfile != null) {
+            print('🚶‍♂️ Walker Profile:');
+            print('   - City: ${walkerProfile.city}');
+            print('   - Rating: ${walkerProfile.averageRating}/5 (${walkerProfile.totalReviews} reviews)');
+            print('   - Recent walks: ${walkerProfile.recentWalks.length}');
+            if (walkerProfile.recentWalks.isNotEmpty) {
+              print('   - Recent dog names: ${walkerProfile.recentWalks.map((w) => w.dogName).join(', ')}');
+            }
+          } else {
+            print('   - No walker profile found');
+          }
+        } else {
+          final ownerProfile = user.ownerProfile;
+          if (ownerProfile != null) {
+            print('🐕 Owner Profile:');
+            print('   - Dog Name: "${ownerProfile.dogName}"');
+            print('   - Dog Breed: ${ownerProfile.dogBreed ?? 'Not specified'}');
+            print('   - Dog Age: ${ownerProfile.dogAge != null ? '${ownerProfile.dogAge} years' : 'Not specified'}');
+            print('   - Dog Size: ${ownerProfile.dogSizeText}');
+            print('   - Dog Bio: ${ownerProfile.dogBio ?? 'Not specified'}');
+          } else {
+            print('   - No owner profile found');
+          }
+        }
+      } else {
+        print('❌ No user context provided');
+      }
+
       // Convert local file path to base64 for API call
       final imageFile = File(imagePath);
       if (!await imageFile.exists()) {
@@ -559,6 +597,12 @@ Do not offer advice or opinions. Simply describe what you see in a structured, c
 
       // Build contextual prompt based on user role
       String contextualPrompt = _buildContextualCaptionPrompt(user);
+      
+      // Debug: Log the prompt being sent to AI
+      print('🤖 AI Prompt being sent:');
+      print('=' * 50);
+      print(contextualPrompt);
+      print('=' * 50);
 
       final response = await http.post(
         Uri.parse(_baseUrl),
@@ -597,13 +641,22 @@ Do not offer advice or opinions. Simply describe what you see in a structured, c
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final caption = data['choices'][0]['message']['content'] as String?;
+        
+        // Debug: Log the AI response
+        print('🤖 AI Response:');
+        print('   - Status: ${response.statusCode}');
+        print('   - Caption: "${caption?.trim()}"');
+        print('🐕 CAPTION GENERATION DEBUG END');
+        
         return caption?.trim();
       } else {
-        print('OpenAI Caption Generation Error: ${response.statusCode} - ${response.body}');
+        print('❌ OpenAI API Error: ${response.statusCode} - ${response.body}');
+        print('🐕 CAPTION GENERATION DEBUG END');
         return null;
       }
     } catch (e) {
-      print('Error generating photo caption: $e');
+      print('❌ Error generating photo caption: $e');
+      print('🐕 CAPTION GENERATION DEBUG END');
       return null;
     }
   }
@@ -717,7 +770,7 @@ GUIDELINES:
 - Include relevant emojis where appropriate
 - Focus on the personal bond and relationship with the dog
 - If you see a dog, make it personal and emotional
-- Use the dog's name if provided and if it seems like a personal pet
+- Use the dog's name if provided.
 - Show love and care for the dog
 - Use a warm, personal tone
 - Don't mention technical details about the photo itself

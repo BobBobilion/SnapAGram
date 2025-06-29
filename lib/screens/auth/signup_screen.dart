@@ -51,6 +51,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             duration: const Duration(milliseconds: 1500),
           ),
         );
+        // Pop the signup screen so AuthWrapper can display the correct
+        // next screen (onboarding or home) based on the updated auth state.
+        Navigator.of(context).popUntil((route) => route.isFirst);
         // Don't use Navigator.pop() - let AuthWrapper handle navigation to onboarding
         // The auth state change will automatically trigger navigation
       }
@@ -78,6 +81,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       await authService.signInWithGoogle();
       
       if (mounted) {
+        // Close the signup screen to allow AuthWrapper to rebuild and
+        // navigate the user according to their onboarding status.
+        Navigator.of(context).popUntil((route) => route.isFirst);
         // Don't use Navigator.pop() - let AuthWrapper handle navigation to onboarding
         // The auth state change will automatically trigger navigation
       }

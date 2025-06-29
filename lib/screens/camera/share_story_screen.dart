@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -33,23 +34,30 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
   bool _captionGenerated = false;
   String? _generatedCaption;
   bool _captionGenerationCancelled = false;
+  bool _mounted = true; // Track if widget is mounted
 
   @override
   void initState() {
     super.initState();
+    _mounted = true;
     _generateCaption();
   }
 
   @override
   void dispose() {
+    _mounted = false;
     _captionGenerationCancelled = true;
     _captionController.dispose();
     super.dispose();
   }
 
   Future<void> _generateCaption() async {
-    if (_captionGenerationCancelled) return;
+    if (_captionGenerationCancelled || !_mounted) return;
     
+    print('🚀 CAPTION GENERATION TRIGGERED');
+    print('📱 ShareStoryScreen: Starting AI caption generation...');
+    
+    if (!_mounted) return;
     setState(() {
       _isGeneratingCaption = true;
       _captionGenerated = false;
@@ -57,33 +65,64 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
     });
 
     try {
+      // Check mounted before accessing ref
+      if (!_mounted) return;
       final openAIService = ref.read(openAIServiceProvider);
+      
+      if (!_mounted) return;
       final authService = ref.read(authServiceProvider);
       final user = authService.userModel;
       
+      print('👤 User data being passed to AI:');
+      print('   - Name: ${user?.displayName ?? 'Unknown'}');
+      print('   - Role: ${user?.isWalker == true ? 'Walker' : 'Owner'}');
+      print('   - Has owner profile: ${user?.ownerProfile != null}');
+      print('   - Has walker profile: ${user?.walkerProfile != null}');
+      
+      if (user?.ownerProfile != null) {
+        print('   - Dog name in profile: "${user!.ownerProfile!.dogName}"');
+      }
+      
+      if (!_mounted) return;
       final caption = await openAIService.generatePhotoCaption(
         widget.imagePath,
         user: user,
       );
       
-      if (_captionGenerationCancelled || !mounted) return;
+      if (_captionGenerationCancelled || !_mounted) {
+        print('⚠️ Caption generation cancelled or widget unmounted');
+        return;
+      }
       
       if (caption != null && caption.isNotEmpty) {
+        print('✅ Caption generated successfully: "$caption"');
+        if (!_mounted) return;
         setState(() {
           _generatedCaption = caption;
           _captionGenerated = true;
           _isGeneratingCaption = false;
           if (_captionController.text.isEmpty) {
             _captionController.text = caption;
+            print('📝 Caption set in text field');
+          } else {
+            print('📝 User already typing, caption not auto-filled');
           }
         });
       } else {
+        print('❌ No caption generated (null or empty)');
+        if (!_mounted) return;
         setState(() => _isGeneratingCaption = false);
       }
     } catch (e) {
-      if (!mounted || _captionGenerationCancelled) return;
+      if (!_mounted || _captionGenerationCancelled) {
+        print('⚠️ Error occurred but widget unmounted or cancelled');
+        return;
+      }
       
+      print('❌ Caption generation error: $e');
+      if (!_mounted) return;
       setState(() => _isGeneratingCaption = false);
+      if (!_mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Could not generate caption suggestion'),
@@ -95,12 +134,12 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
   }
 
   void _retryCaption() {
-    if (!_captionGenerationCancelled) {
-      _generateCaption();
-    }
+    if (!_mounted || _captionGenerationCancelled) return;
+    _generateCaption();
   }
 
   void _clearCaption() {
+    if (!_mounted) return;
     setState(() {
       _captionController.clear();
       _generatedCaption = null;
@@ -171,6 +210,45 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
     }
   }
 
+  void _debugUserContext() {
+    if (!_mounted) return;
+    
+    final authService = ref.read(authServiceProvider);
+    final user = authService.userModel;
+    
+    print('🔍 DEBUG USER CONTEXT');
+    print('=====================');
+    print('User: ${user?.displayName ?? 'Unknown'}');
+    print('Role: ${user?.isWalker == true ? 'Dog Walker' : 'Dog Owner'}');
+    print('UID: ${user?.uid ?? 'Unknown'}');
+    
+    if (user?.ownerProfile != null) {
+      final profile = user!.ownerProfile!;
+      print('🐕 OWNER PROFILE:');
+      print('   Dog Name: "${profile.dogName}"');
+      print('   Dog Breed: ${profile.dogBreed ?? 'Not specified'}');
+      print('   Dog Age: ${profile.dogAge != null ? '${profile.dogAge} years' : 'Not specified'}');
+      print('   Dog Size: ${profile.dogSizeText}');
+      print('   Dog Bio: ${profile.dogBio ?? 'Not specified'}');
+    } else {
+      print('❌ No owner profile found');
+    }
+    
+    if (user?.walkerProfile != null) {
+      final profile = user!.walkerProfile!;
+      print('🚶‍♂️ WALKER PROFILE:');
+      print('   City: ${profile.city}');
+      print('   Rating: ${profile.averageRating}/5 (${profile.totalReviews} reviews)');
+      print('   Recent walks: ${profile.recentWalks.length}');
+      if (profile.recentWalks.isNotEmpty) {
+        print('   Recent dog names: ${profile.recentWalks.map((w) => w.dogName).join(', ')}');
+      }
+    } else {
+      print('❌ No walker profile found');
+    }
+    print('=====================');
+  }
+
   @override
   Widget build(BuildContext context) {
     final authService = ref.watch(authServiceProvider);
@@ -192,6 +270,13 @@ class _ShareStoryScreenState extends ConsumerState<ShareStoryScreen> {
           foregroundColor: Colors.black,
           elevation: 1,
           actions: [
+            // Debug button (only in debug mode)
+            if (kDebugMode)
+              IconButton(
+                onPressed: _debugUserContext,
+                icon: const Icon(Icons.bug_report),
+                tooltip: 'Debug User Context',
+              ),
             TextButton(
               onPressed: _isPosting ? null : _postStory,
               child: _isPosting
