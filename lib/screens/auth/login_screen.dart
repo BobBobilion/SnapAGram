@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
 import '../home/home_screen.dart';
+import '../../main.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -20,6 +21,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
   bool _isGoogleLoading = false;
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if user is already authenticated and redirect if so
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authService = ref.read(authServiceProvider);
+      if (authService.isAuthenticated) {
+        // User is already authenticated, let AuthWrapper handle navigation
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const AuthWrapper()),
+          (route) => false,
+        );
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -54,9 +71,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           );
           
-          // Force navigation to home screen
+          // Let AuthWrapper handle navigation to proper screen (onboarding or home)
           Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            MaterialPageRoute(builder: (context) => const AuthWrapper()),
             (route) => false,
           );
         }
@@ -97,9 +114,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           );
           
-          // Force navigation to home screen
+          // Let AuthWrapper handle navigation to proper screen (onboarding or home)
           Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            MaterialPageRoute(builder: (context) => const AuthWrapper()),
             (route) => false,
           );
         }
